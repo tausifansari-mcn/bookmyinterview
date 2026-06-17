@@ -807,3 +807,147 @@ Emitted 'error' event on Server instance at:
 }
 
 Node.js v24.16.0
+7:32:23 pm [tsx] change in ./src\modules\auth\auth.service.ts Rerunning...
+c[db] Connected to MySQL at 122.184.128.90:3306/getjob
+
+🚀 Book My Interview API running on http://localhost:5055
+   Environment : development
+   Database    : 122.184.128.90:3306/getjob
+   Frontend    : http://localhost:5173
+
+7:36:16 pm [tsx] change in ./src\modules\auth\auth.service.ts Restarting...
+c[db] Connected to MySQL at 122.184.128.90:3306/getjob
+
+🚀 Book My Interview API running on http://localhost:5055
+   Environment : development
+   Database    : 122.184.128.90:3306/getjob
+   Frontend    : http://localhost:5173
+
+7:36:22 pm [tsx] change in ./src\modules\auth\auth.service.ts Restarting...
+c[db] Connected to MySQL at 122.184.128.90:3306/getjob
+node:events:487
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::5055
+    at Server.setupListenHandle [as _listen2] (node:net:2008:16)
+    at listenInCluster (node:net:2065:12)
+    at Server.listen (node:net:2170:7)
+    at app.listen (C:\Users\MAS60358\Desktop\Interview Project\backend\node_modules\express\lib\application.js:635:24)
+    at startServer (C:\Users\MAS60358\Desktop\Interview Project\backend\src\server.ts:7:7)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:2044:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 5055
+}
+
+Node.js v24.16.0
+7:37:06 pm [tsx] change in ./src\modules\upload\upload.routes.ts Rerunning...
+c[db] Connected to MySQL at 122.184.128.90:3306/getjob
+node:events:487
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::5055
+    at Server.setupListenHandle [as _listen2] (node:net:2008:16)
+    at listenInCluster (node:net:2065:12)
+    at Server.listen (node:net:2170:7)
+    at app.listen (C:\Users\MAS60358\Desktop\Interview Project\backend\node_modules\express\lib\application.js:635:24)
+    at startServer (C:\Users\MAS60358\Desktop\Interview Project\backend\src\server.ts:7:7)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:2044:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 5055
+}
+
+Node.js v24.16.0
+7:37:13 pm [tsx] change in ./src\modules\upload\upload.routes.ts Rerunning...
+c[db] Connected to MySQL at 122.184.128.90:3306/getjob
+node:events:487
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::5055
+    at Server.setupListenHandle [as _listen2] (node:net:2008:16)
+    at listenInCluster (node:net:2065:12)
+    at Server.listen (node:net:2170:7)
+    at app.listen (C:\Users\MAS60358\Desktop\Interview Project\backend\node_modules\express\lib\application.js:635:24)
+    at startServer (C:\Users\MAS60358\Desktop\Interview Project\backend\src\server.ts:7:7)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:2044:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 5055
+}
+
+Node.js v24.16.0
+7:37:21 pm [tsx] change in ./src\modules\portal\portal.routes.ts Rerunning...
+c[db] Connected to MySQL at 122.184.128.90:3306/getjob
+
+🚀 Book My Interview API running on http://localhost:5055
+   Environment : development
+   Database    : 122.184.128.90:3306/getjob
+   Frontend    : http://localhost:5173
+
+7:37:29 pm [tsx] change in ./src\modules\portal\portal.routes.ts Restarting...
+c[db] Connected to MySQL at 122.184.128.90:3306/getjob
+node:events:487
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::5055
+    at Server.setupListenHandle [as _listen2] (node:net:2008:16)
+    at listenInCluster (node:net:2065:12)
+    at Server.listen (node:net:2170:7)
+    at app.listen (C:\Users\MAS60358\Desktop\Interview Project\backend\node_modules\express\lib\application.js:635:24)
+    at startServer (C:\Users\MAS60358\Desktop\Interview Project\backend\src\server.ts:7:7)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:2044:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 5055
+}
+
+Node.js v24.16.0
+7:38:10 pm [tsx] change in ./src\modules\jobs\jobs.routes.ts Rerunning...
+c[db] Connected to MySQL at 122.184.128.90:3306/getjob
+node:events:487
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::5055
+    at Server.setupListenHandle [as _listen2] (node:net:2008:16)
+    at listenInCluster (node:net:2065:12)
+    at Server.listen (node:net:2170:7)
+    at app.listen (C:\Users\MAS60358\Desktop\Interview Project\backend\node_modules\express\lib\application.js:635:24)
+    at startServer (C:\Users\MAS60358\Desktop\Interview Project\backend\src\server.ts:7:7)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:2044:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 5055
+}
+
+Node.js v24.16.0
