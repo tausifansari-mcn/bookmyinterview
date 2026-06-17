@@ -1,0 +1,107 @@
+
+> book-my-interview-backend@1.0.0 dev
+> tsx watch src/server.ts
+
+[db] Connected to MySQL at 122.184.128.90:3306/getjob
+
+🚀 Book My Interview API running on http://localhost:5055
+   Environment : development
+   Database    : 122.184.128.90:3306/getjob
+   Frontend    : http://localhost:5173
+
+Error: Invalid credentials
+    at Object.login (C:\Users\MAS60358\Desktop\Interview Project\backend\src\modules\auth\auth.service.ts:18:22)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async <anonymous> (C:\Users\MAS60358\Desktop\Interview Project\backend\src\modules\auth\auth.routes.ts:16:18)
+[0mPOST /api/v1/auth/login [31m500[0m 24.770 ms - 49[0m
+Error: Invalid credentials
+    at Object.login (C:\Users\MAS60358\Desktop\Interview Project\backend\src\modules\auth\auth.service.ts:18:22)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async <anonymous> (C:\Users\MAS60358\Desktop\Interview Project\backend\src\modules\auth\auth.routes.ts:16:18)
+[0mPOST /api/v1/auth/login [31m500[0m 9.250 ms - 49[0m
+[0mGET /api/employees/me [33m404[0m 0.218 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.110 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.133 ms - 45[0m
+[0mGET /api/employees/me [33m404[0m 0.105 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.068 ms - 45[0m
+[0mGET /api/employees/me [33m404[0m 0.105 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.079 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.168 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.207 ms - 45[0m
+[0mGET /api/employees/me [33m404[0m 0.115 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.056 ms - 45[0m
+[0mGET /api/inbox [33m404[0m 0.042 ms - 45[0m
+[0mGET /api/inbox/count [33m404[0m 0.046 ms - 45[0m
+[0mGET /api/employees/me [33m404[0m 0.059 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.137 ms - 45[0m
+6:17:31 pm [tsx] change in ./src\modules\auth\auth.service.ts Restarting...
+c[db] Connected to MySQL at 122.184.128.90:3306/getjob
+
+🚀 Book My Interview API running on http://localhost:5055
+   Environment : development
+   Database    : 122.184.128.90:3306/getjob
+   Frontend    : http://localhost:5173
+
+[0mGET /api/access/me [33m404[0m 0.795 ms - 45[0m
+[0mGET /api/inbox [33m404[0m 0.150 ms - 45[0m
+[0mGET /api/inbox/count [33m404[0m 0.103 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.066 ms - 45[0m
+[0mGET /api/employees/me [33m404[0m 0.072 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.146 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.117 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.088 ms - 45[0m
+[0mGET /api/employees/me [33m404[0m 0.062 ms - 45[0m
+[0mGET /api/inbox [33m404[0m 0.068 ms - 45[0m
+[0mGET /api/inbox/count [33m404[0m 0.040 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.110 ms - 45[0m
+[0mGET /api/inbox [33m404[0m 0.108 ms - 45[0m
+[0mGET /api/inbox/count [33m404[0m 0.050 ms - 45[0m
+[0mGET /api/employees/me [33m404[0m 0.043 ms - 45[0m
+[0mGET /api/employees/me [33m404[0m 0.077 ms - 45[0m
+[0mGET /api/ats/onboarding/requests [33m404[0m 0.056 ms - 45[0m
+[0mGET /api/employees/me [33m404[0m 0.177 ms - 45[0m
+[0mGET /api/ats/onboarding/requests [33m404[0m 0.045 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.038 ms - 45[0m
+[0mGET /api/inbox [33m404[0m 0.034 ms - 45[0m
+[0mGET /api/inbox/count [33m404[0m 0.033 ms - 45[0m
+[0mGET /api/employees/me [33m404[0m 0.033 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.083 ms - 45[0m
+[0mGET /api/employees/me [33m404[0m 0.042 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.214 ms - 45[0m
+[0mGET /api/employees/me [33m404[0m 0.083 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.106 ms - 45[0m
+[0mGET /api/inbox [33m404[0m 0.071 ms - 45[0m
+[0mGET /api/inbox/count [33m404[0m 0.046 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.055 ms - 45[0m
+[0mGET /api/employees/me [33m404[0m 0.040 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.192 ms - 45[0m
+[0mGET /api/inbox [33m404[0m 0.086 ms - 45[0m
+[0mGET /api/inbox/count [33m404[0m 0.049 ms - 45[0m
+[0mGET /api/employees/me [33m404[0m 0.043 ms - 45[0m
+[0mGET /api/employees/me [33m404[0m 0.075 ms - 45[0m
+[0mGET /api/ats/onboarding/requests [33m404[0m 0.039 ms - 45[0m
+[0mGET /api/employees/me [33m404[0m 0.082 ms - 45[0m
+[0mGET /api/ats/onboarding/requests [33m404[0m 0.056 ms - 45[0m
+[0mGET /api/inbox [33m404[0m 0.042 ms - 45[0m
+[0mGET /api/inbox/count [33m404[0m 0.033 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.068 ms - 45[0m
+[0mGET /api/employees/me [33m404[0m 0.036 ms - 45[0m
+[0mGET /api/inbox [33m404[0m 0.065 ms - 45[0m
+[0mGET /api/inbox/count [33m404[0m 0.039 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.031 ms - 45[0m
+[0mGET /api/employees/me [33m404[0m 0.029 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.074 ms - 45[0m
+[0mGET /api/employees/me [33m404[0m 0.042 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.087 ms - 45[0m
+[0mGET /api/employees/me [33m404[0m 0.100 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.052 ms - 45[0m
+[0mGET /api/employees/me [33m404[0m 0.086 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.042 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.171 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.084 ms - 45[0m
+[0mGET /api/inbox [33m404[0m 0.087 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.047 ms - 45[0m
+[0mGET /api/inbox/count [33m404[0m 0.034 ms - 45[0m
+[0mGET /api/employees/me [33m404[0m 0.040 ms - 45[0m
+[0mGET /api/employees/me [33m404[0m 0.043 ms - 45[0m
+[0mGET /api/access/me [33m404[0m 0.122 ms - 45[0m

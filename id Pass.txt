@@ -1,0 +1,10 @@
+
+Field	Value
+Email	recruiter@bookmyinterview.in
+Password	Admin@123
+Other demo accounts:
+
+Role	Email	Password
+Super Admin	admin@bookmyinterview.in	Admin@123
+HR Manager	hr@bookmyinterview.in	Admin@123
+Recruiter	recruiter@bookmyinterview.in	Admin@123

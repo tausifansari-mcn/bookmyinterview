@@ -1,0 +1,28 @@
+
+> book-my-interview@1.0.0 dev
+> vite --port 5173
+
+Port 5173 is in use, trying another one...
+
+  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m551[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5174[22m/[39m
+[2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m
+[2m6:48:54 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/styles/globals.css[22m
+[2m6:49:04 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/styles/globals.css[22m
+[2m7:03:46 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/portal/PortalLoginPage.tsx, /src/styles/globals.css[22m
+[2m7:03:53 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/styles/globals.css[22m
+[2m7:03:59 pm[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/styles/globals.css[22m
+[2m11:29:55 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/auth/LoginPage.tsx, /src/styles/globals.css[22m
+[2m11:33:43 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/styles/globals.css[22m
+[2m11:33:57 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/portal/PortalLoginPage.tsx, /src/styles/globals.css[22m
+[2m11:34:08 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/portal/PortalRegisterPage.tsx, /src/styles/globals.css[22m
+[2m11:34:20 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/portal/PortalJobsPage.tsx, /src/styles/globals.css[22m
+[2m11:34:28 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/portal/PortalJobsPage.tsx, /src/styles/globals.css[22m
+[2m11:34:33 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/portal/PortalJobsPage.tsx, /src/styles/globals.css[22m
+[2m11:34:42 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/portal/PortalApplicationsPage.tsx, /src/styles/globals.css[22m
+[2m11:34:52 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/portal/PortalApplicationsPage.tsx, /src/styles/globals.css[22m
+[2m11:35:07 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/portal/PortalApplicationsPage.tsx, /src/styles/globals.css[22m
+[2m11:35:32 am[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/portal/PortalJobsPage.tsx, /src/styles/globals.css[22m
+[2m12:46:11 pm[22m [36m[1m[vite][22m[39m [32mvite.config.ts changed, restarting server...[39m
+[2m12:46:11 pm[22m [36m[1m[vite][22m[39m server restarted.
