@@ -14,6 +14,13 @@ export const db = mysql.createPool({
   queueLimit:         0,
   enableKeepAlive:    true,
   keepAliveInitialDelay: 0,
+  decimalNumbers:     true,
+})
+
+// Force every pooled connection to use utf8mb4_unicode_ci so string
+// parameters match the collation all bmi_ tables were created with.
+db.on('connection', (conn: any) => {
+  conn.query("SET NAMES 'utf8mb4' COLLATE 'utf8mb4_unicode_ci'")
 })
 
 export async function testConnection(): Promise<void> {

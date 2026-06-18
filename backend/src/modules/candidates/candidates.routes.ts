@@ -33,8 +33,7 @@ candidatesRouter.get('/', async (req: AuthRequest, res, next) => {
     const params: any[] = [req.user!.tenant_id]
     if (search) { sql += ` AND (full_name LIKE ? OR mobile LIKE ? OR email LIKE ?)`; const s = `%${search}%`; params.push(s, s, s) }
     if (source) { sql += ` AND source = ?`; params.push(source) }
-    sql += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`
-    params.push(Number(limit), Number(offset))
+    sql += ` ORDER BY created_at DESC LIMIT ${Number(limit)} OFFSET ${Number(offset)}`
 
     const [rows] = await db.execute<RowDataPacket[]>(sql, params)
     res.json({ success: true, data: rows })
@@ -44,12 +43,52 @@ candidatesRouter.get('/', async (req: AuthRequest, res, next) => {
 // GET /api/v1/candidates/:id
 candidatesRouter.get('/:id', async (req: AuthRequest, res, next) => {
   try {
-    const [rows] = await db.execute<RowDataPacket[]>(
-      `SELECT * FROM bmi_candidate WHERE id = ? AND tenant_id = ?`,
-      [req.params.id, req.user!.tenant_id]
+    const { id } = req.params
+    const tid = req.user!.tenant_id
+
+    const [cRows] = await db.execute<RowDataPacket[]>(
+      `SELECT * FROM bmi_candidate WHERE id = ? AND tenant_id = ?`, [id, tid]
     )
-    if (!rows[0]) return res.status(404).json({ success: false, message: 'Not found' })
-    res.json({ success: true, data: rows[0] })
+    if (!cRows[0]) return res.status(404).json({ success: false, message: 'Candidate not found' })
+    const candidate = cRows[0]
+
+    const [eduRows]  = await db.execute<RowDataPacket[]>(
+      `SELECT * FROM bmi_candidate_education WHERE candidate_id = ? ORDER BY sort_order, passing_year DESC`, [id]
+    )
+    const [expRows]  = await db.execute<RowDataPacket[]>(
+      `SELECT * FROM bmi_candidate_experience WHERE candidate_id = ? ORDER BY sort_order, joining_date DESC`, [id]
+    )
+    const [sklRows]  = await db.execute<RowDataPacket[]>(
+      `SELECT * FROM bmi_candidate_skill WHERE candidate_id = ? ORDER BY sort_order`, [id]
+    )
+    const [certRows] = await db.execute<RowDataPacket[]>(
+      `SELECT * FROM bmi_candidate_certification WHERE candidate_id = ? ORDER BY sort_order`, [id]
+    )
+    const [appRows]  = await db.execute<RowDataPacket[]>(
+      `SELECT a.id, a.current_stage_name, a.status, a.applied_at,
+              j.title AS job_title, j.job_code,
+              ev.total_score, ev.recommendation, ev.profile_score, ev.education_score,
+              ev.experience_score, ev.skill_score, ev.resume_score, ev.assessment_score,
+              ca.status AS assessment_status, ca.percentage AS assessment_pct, ca.passed AS assessment_passed
+       FROM bmi_application a
+       JOIN bmi_job j ON j.id = a.job_id
+       LEFT JOIN bmi_evaluation_score ev ON ev.application_id = a.id
+       LEFT JOIN bmi_candidate_assessment ca ON ca.application_id = a.id
+       WHERE a.candidate_id = ? AND a.tenant_id = ?
+       ORDER BY a.applied_at DESC`, [id, tid]
+    )
+
+    res.json({
+      success: true,
+      data: {
+        ...candidate,
+        education:      eduRows,
+        experience:     expRows,
+        skills:         sklRows,
+        certifications: certRows,
+        applications:   appRows,
+      }
+    })
   } catch (err) { next(err) }
 })
 

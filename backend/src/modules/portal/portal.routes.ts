@@ -7,6 +7,7 @@ import type { RowDataPacket } from 'mysql2'
 import { db } from '../../db/mysql.js'
 import { env } from '../../config/env.js'
 import { sendOTPEmail, sendWelcomeEmail, sendApplicationConfirmationEmail } from '../../services/email.service.js'
+import { evaluateApplication } from '../../services/evaluation.service.js'
 
 export const portalRouter = Router()
 
@@ -697,6 +698,9 @@ portalRouter.post('/jobs/:jobId/apply', requireCandidate, async (req: any, res, 
         )
       }
     }
+
+    // Trigger evaluation engine (non-blocking)
+    evaluateApplication(appId).catch(() => {})
 
     // Send confirmation email
     const [candRows] = await db.execute<RowDataPacket[]>(

@@ -27,9 +27,6 @@ const schema = z.object({
   SMTP_FROM:      z.string().default('noreply@bookmyinterview.in'),
   SMTP_FROM_NAME: z.string().default('Book My Interview'),
 
-  ANTHROPIC_API_KEY: z.string().optional(),
-  AI_MODEL:          z.string().default('claude-sonnet-4-6'),
-
   RAZORPAY_KEY_ID:     z.string().optional(),
   RAZORPAY_KEY_SECRET: z.string().optional(),
 })

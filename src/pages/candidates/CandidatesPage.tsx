@@ -1,88 +1,123 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { Search, Filter, Upload, Sparkles, User } from 'lucide-react'
-import { formatDate, getInitials } from '@/lib/utils'
+import { api } from '@/lib/api'
+import { Search, User } from 'lucide-react'
 
-const candidates = [
-  { id: '1', name: 'Rahul Sharma',   email: 'rahul@gmail.com',  mobile: '9876543210', source: 'walk_in',  ai_score: 82, experience: 2.5, location: 'Mumbai',    stage: 'HR Round', applied: '2026-06-14' },
-  { id: '2', name: 'Priya Mehta',    email: 'priya@gmail.com',  mobile: '9876543211', source: 'naukri',   ai_score: 75, experience: 1.5, location: 'Pune',      stage: 'Applied',  applied: '2026-06-15' },
-  { id: '3', name: 'Amit Kumar',     email: 'amit@gmail.com',   mobile: '9876543212', source: 'referral', ai_score: 91, experience: 3,   location: 'Delhi',     stage: 'Ops Round', applied: '2026-06-13' },
-  { id: '4', name: 'Sneha Patel',    email: 'sneha@gmail.com',  mobile: '9876543213', source: 'linkedin', ai_score: 68, experience: 0.5, location: 'Bangalore', stage: 'Applied',  applied: '2026-06-16' },
-  { id: '5', name: 'Vikram Singh',   email: 'vikram@gmail.com', mobile: '9876543214', source: 'campus',   ai_score: 88, experience: 4,   location: 'Mumbai',    stage: 'Offer',    applied: '2026-06-10' },
-]
+interface Candidate {
+  id: string
+  candidate_code: string
+  full_name: string
+  email: string
+  mobile: string
+  experience_years: number | null
+  current_location: string | null
+  current_designation: string | null
+  profile_photo_url: string | null
+  source: string | null
+  profile_completion: number | null
+  created_at: string
+}
 
-const scoreColor = (score: number) =>
-  score >= 80 ? 'text-green-700 bg-green-50' : score >= 60 ? 'text-amber-700 bg-amber-50' : 'text-red-700 bg-red-50'
+function Avatar({ name, photo }: { name: string; photo: string | null }) {
+  if (photo) return <img src={photo} className="h-8 w-8 rounded-full object-cover" alt={name} />
+  const i = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+  return (
+    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+      <span className="text-xs font-semibold text-primary">{i}</span>
+    </div>
+  )
+}
 
 export default function CandidatesPage() {
+  const [candidates, setCandidates] = useState<Candidate[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const filtered = candidates.filter(c =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.mobile.includes(search)
-  )
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const { data } = await api.get('/candidates', { params: { search: search || undefined, limit: 50 } })
+      setCandidates(data.data)
+      setTotal(data.total ?? data.data.length)
+    } catch { setCandidates([]) } finally { setLoading(false) }
+  }, [search])
+
+  useEffect(() => { load() }, [load])
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Candidates</h1>
-          <p className="text-muted-foreground text-sm">{candidates.length} in talent pool</p>
-        </div>
-        <div className="flex gap-2">
-          <button className="flex items-center gap-1.5 text-sm border px-3 py-2 rounded-lg hover:bg-accent">
-            <Upload className="h-4 w-4" /> Import CSV
-          </button>
-          <button className="flex items-center gap-1.5 text-sm bg-primary text-white px-3 py-2 rounded-lg hover:bg-primary/90">
-            <User className="h-4 w-4" /> Add Candidate
-          </button>
+          <p className="text-muted-foreground text-sm">{total} in talent pool</p>
         </div>
       </div>
 
       <div className="flex gap-3">
         <div className="flex-1 flex items-center gap-2 bg-card border rounded-lg px-3 py-2">
           <Search className="h-4 w-4 text-muted-foreground" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or mobile…" className="flex-1 text-sm bg-transparent outline-none" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search by name, email or mobile..."
+            className="flex-1 text-sm bg-transparent outline-none"
+          />
         </div>
-        <button className="flex items-center gap-1.5 text-sm border px-3 py-2 rounded-lg hover:bg-accent">
-          <Filter className="h-4 w-4" /> Filter
-        </button>
       </div>
 
       <div className="bg-card border rounded-xl overflow-hidden">
         <table className="w-full text-sm">
           <thead className="border-b bg-muted/30">
             <tr>
-              {['Candidate', 'Contact', 'Experience', 'Stage', 'AI Score', 'Source', 'Applied', 'Action'].map(h => (
+              {['Candidate','Contact','Experience','Designation','Profile','Source','Joined'].map(h => (
                 <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">{h}</th>
               ))}
+              <th className="px-4 py-3 text-xs font-semibold text-muted-foreground" />
             </tr>
           </thead>
           <tbody>
-            {filtered.map(c => (
+            {loading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <tr key={i} className="border-b">
+                  {Array.from({ length: 8 }).map((_, j) => (
+                    <td key={j} className="px-4 py-3"><div className="h-4 bg-muted animate-pulse rounded" /></td>
+                  ))}
+                </tr>
+              ))
+            ) : candidates.length === 0 ? (
+              <tr><td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
+                <User className="h-8 w-8 mx-auto mb-2" />No candidates found
+              </td></tr>
+            ) : candidates.map(c => (
               <tr key={c.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-full bg-brand-100 flex items-center justify-center text-xs font-bold text-brand-700">
-                      {getInitials(c.name)}
+                    <Avatar name={c.full_name} photo={c.profile_photo_url} />
+                    <div>
+                      <Link to={`/candidates/${c.id}`} className="font-medium hover:text-primary">{c.full_name}</Link>
+                      <p className="text-xs text-muted-foreground">{c.candidate_code}</p>
                     </div>
-                    <Link to={`/candidates/${c.id}`} className="font-medium hover:text-primary">{c.name}</Link>
                   </div>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
                   <p>{c.mobile}</p>
                   <p className="text-xs">{c.email}</p>
                 </td>
-                <td className="px-4 py-3">{c.experience} yrs · {c.location}</td>
+                <td className="px-4 py-3">{c.experience_years != null ? `${c.experience_years} yrs` : '—'} · {c.current_location ?? '—'}</td>
+                <td className="px-4 py-3 text-muted-foreground">{c.current_designation ?? '—'}</td>
                 <td className="px-4 py-3">
-                  <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full">{c.stage}</span>
+                  {c.profile_completion != null ? (
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden w-16">
+                        <div className="h-1.5 bg-primary rounded-full" style={{ width: `${c.profile_completion}%` }} />
+                      </div>
+                      <span className="text-xs text-muted-foreground">{c.profile_completion}%</span>
+                    </div>
+                  ) : '—'}
                 </td>
-                <td className="px-4 py-3">
-                  <span className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full w-fit font-semibold ${scoreColor(c.ai_score)}`}>
-                    <Sparkles className="h-3 w-3" />{c.ai_score}%
-                  </span>
-                </td>
-                <td className="px-4 py-3 capitalize text-muted-foreground">{c.source.replace('_', ' ')}</td>
-                <td className="px-4 py-3 text-muted-foreground">{formatDate(c.applied)}</td>
+                <td className="px-4 py-3 capitalize text-muted-foreground">{(c.source ?? 'direct').replace('_', ' ')}</td>
+                <td className="px-4 py-3 text-muted-foreground">{new Date(c.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
                 <td className="px-4 py-3">
                   <Link to={`/candidates/${c.id}`} className="text-xs text-primary font-medium hover:underline">View →</Link>
                 </td>

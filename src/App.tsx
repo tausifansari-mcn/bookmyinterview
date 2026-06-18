@@ -14,6 +14,7 @@ import PortalApplicationsPage from '@/pages/portal/PortalApplicationsPage'
 import PortalProfilePage from '@/pages/portal/PortalProfilePage'
 import ForgotPasswordPage from '@/pages/portal/ForgotPasswordPage'
 import ResetPasswordPage from '@/pages/portal/ResetPasswordPage'
+import PortalAssessmentPage from '@/pages/portal/PortalAssessmentPage'
 import DashboardPage from '@/pages/dashboard/DashboardPage'
 import JobsPage from '@/pages/jobs/JobsPage'
 import JobDetailPage from '@/pages/jobs/JobDetailPage'
@@ -70,9 +71,10 @@ export default function App() {
           <Route path="/portal/jobs"            element={<PortalJobsPage />} />
           <Route path="/portal/applications"    element={<PortalApplicationsPage />} />
           <Route path="/portal/profile"         element={<PortalProfilePage />} />
-          <Route path="/portal/forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="/portal/reset-password"  element={<ResetPasswordPage />} />
-          <Route path="/portal"                 element={<Navigate to="/portal/dashboard" replace />} />
+          <Route path="/portal/forgot-password"      element={<ForgotPasswordPage />} />
+          <Route path="/portal/reset-password"     element={<ResetPasswordPage />} />
+          <Route path="/portal/assessment/:token"  element={<PortalAssessmentPage />} />
+          <Route path="/portal"                    element={<Navigate to="/portal/dashboard" replace />} />
         </Routes>
       </CandidateAuthProvider>
     </AuthProvider>

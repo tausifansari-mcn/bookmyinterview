@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, Briefcase, Users, FileText,
   Calendar, Gift, ClipboardCheck, BarChart2,
-  Settings, Sparkles, UserCog,
+  Settings, Target, UserCog,
 } from 'lucide-react'
 
 const nav = [
@@ -28,11 +28,11 @@ export default function Sidebar() {
     <aside className="w-64 border-r bg-card flex flex-col">
       <div className="flex items-center gap-2 p-5 border-b">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-          <Sparkles className="h-5 w-5 text-white" />
+          <Target className="h-5 w-5 text-white" />
         </div>
         <div>
           <p className="font-bold text-sm leading-none">Book My Interview</p>
-          <p className="text-xs text-muted-foreground mt-0.5">AI Hiring OS</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Hiring Intelligence OS</p>
         </div>
       </div>
       <nav className="flex-1 p-3 space-y-0.5">
@@ -55,12 +55,9 @@ export default function Sidebar() {
           ))}
       </nav>
       <div className="p-3 border-t">
-        <div className="rounded-lg bg-brand-50 p-3">
-          <p className="text-xs font-medium text-brand-700">AI Credits</p>
-          <p className="text-lg font-bold text-brand-900">850 left</p>
-          <div className="mt-1 h-1.5 rounded-full bg-brand-200">
-            <div className="h-1.5 rounded-full bg-brand-500" style={{ width: '85%' }} />
-          </div>
+        <div className="rounded-lg bg-primary/5 p-3">
+          <p className="text-xs font-medium text-primary/80">Smart Hiring Platform</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Evaluation Engine Active</p>
         </div>
       </div>
     </aside>

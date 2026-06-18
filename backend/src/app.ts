@@ -8,11 +8,16 @@ import { env } from './config/env.js'
 import { authRouter } from './modules/auth/auth.routes.js'
 import { jobsRouter } from './modules/jobs/jobs.routes.js'
 import { candidatesRouter } from './modules/candidates/candidates.routes.js'
-import { aiRouter } from './modules/ai/ai.routes.js'
 import { portalRouter } from './modules/portal/portal.routes.js'
 import { questionsRouter } from './modules/questions/questions.routes.js'
 import { uploadRouter } from './modules/upload/upload.routes.js'
 import { usersRouter } from './modules/users/users.routes.js'
+import { dashboardRouter } from './modules/dashboard/dashboard.routes.js'
+import { assessmentsRouter } from './modules/assessments/assessments.routes.js'
+import { applicationsRouter } from './modules/applications/applications.routes.js'
+import { interviewsRouter } from './modules/interviews/interviews.routes.js'
+import { offersRouter }    from './modules/offers/offers.routes.js'
+import { analyticsRouter } from './modules/analytics/analytics.routes.js'
 
 export const app = express()
 
@@ -52,11 +57,16 @@ const v1 = express.Router()
 v1.use('/auth',       authRouter)
 v1.use('/jobs',       jobsRouter)
 v1.use('/candidates', candidatesRouter)
-v1.use('/ai',         aiRouter)
 v1.use('/portal',     portalRouter)
 v1.use('/questions',  questionsRouter)
 v1.use('/upload',     uploadRouter)
-v1.use('/users',      usersRouter)
+v1.use('/users',        usersRouter)
+  v1.use('/dashboard',    dashboardRouter)
+  v1.use('/assessments',  assessmentsRouter)
+  v1.use('/applications', applicationsRouter)
+  v1.use('/interviews',   interviewsRouter)
+  v1.use('/offers',       offersRouter)
+  v1.use('/analytics',    analyticsRouter)
 app.use('/api/v1', v1)
 
 // 404

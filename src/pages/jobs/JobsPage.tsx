@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, KeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, MapPin, Users, Clock, Sparkles, Loader2, X, ChevronDown } from 'lucide-react'
+import { Plus, Search, MapPin, Users, Clock, Sparkles, Loader2, X, ChevronDown, CheckCircle } from 'lucide-react'
 import { api } from '@/lib/api'
 
 interface Job {
@@ -48,10 +48,13 @@ export default function JobsPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [form, setForm]       = useState({ ...emptyForm })
-  const [submitting, setSubmitting] = useState(false)
-  const [formError, setFormError]   = useState('')
+  const [submitting, setSubmitting]   = useState(false)
+  const [formError, setFormError]     = useState('')
+  const [successMsg, setSuccessMsg]   = useState('')
   const [departments, setDepartments] = useState<Dept[]>([])
   const [locations, setLocations]     = useState<Loc[]>([])
+  const [skills, setSkills]           = useState<string[]>([])
+  const [skillInput, setSkillInput]   = useState('')
   const titleRef = useRef<HTMLInputElement>(null)
 
   async function loadJobs() {
@@ -82,9 +85,24 @@ export default function JobsPage() {
   useEffect(() => { loadJobs(); loadMeta() }, [])
   useEffect(() => { loadJobs() }, [statusFilter])
 
+  function addSkill(val: string) {
+    const s = val.trim().replace(/,$/,'')
+    if (s && !skills.includes(s)) setSkills(prev => [...prev, s])
+    setSkillInput('')
+  }
+
+  function handleSkillKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addSkill(skillInput) }
+    if (e.key === 'Backspace' && !skillInput && skills.length > 0) {
+      setSkills(prev => prev.slice(0, -1))
+    }
+  }
+
   function openModal() {
     setForm({ ...emptyForm })
     setFormError('')
+    setSkills([])
+    setSkillInput('')
     setShowModal(true)
     setTimeout(() => titleRef.current?.focus(), 100)
   }
@@ -95,7 +113,8 @@ export default function JobsPage() {
     setSubmitting(true)
     setFormError('')
     try {
-      await api.post('/jobs', {
+      if (skillInput.trim()) addSkill(skillInput)   // commit any pending skill
+      const { data } = await api.post('/jobs', {
         title:                form.title.trim(),
         department_id:        form.department_id || undefined,
         location_id:          form.location_id || undefined,
@@ -109,12 +128,15 @@ export default function JobsPage() {
         priority:             form.priority,
         description:          form.description || undefined,
         requirements:         form.requirements || undefined,
+        skills_required:      skills.length > 0 ? skills : undefined,
         closes_at:            form.closes_at || undefined,
       })
       setShowModal(false)
+      setSuccessMsg(data.message ?? 'Job posted successfully!')
+      setTimeout(() => setSuccessMsg(''), 5000)
       loadJobs()
     } catch (err: any) {
-      setFormError(err?.response?.data?.message ?? 'Failed to create job')
+      setFormError(err?.response?.data?.message ?? 'Failed to create job. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -131,6 +153,12 @@ export default function JobsPage() {
 
   return (
     <div className="space-y-5">
+      {successMsg && (
+        <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg text-sm">
+          <CheckCircle className="h-4 w-4 flex-shrink-0 text-green-600" />
+          {successMsg}
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Jobs</h1>
@@ -392,9 +420,38 @@ export default function JobsPage() {
                 <label className="block text-sm font-medium mb-1.5">Requirements</label>
                 <textarea
                   value={form.requirements} onChange={e => set('requirements', e.target.value)}
-                  rows={3} placeholder="List skills, qualifications, and experience required…"
+                  rows={3} placeholder="List qualifications, certifications, and experience required…"
                   className="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary resize-none"
                 />
+              </div>
+
+              {/* Skills Required */}
+              <div>
+                <label className="block text-sm font-medium mb-1.5">
+                  Skills Required
+                  <span className="ml-1 text-xs font-normal text-muted-foreground">(press Enter or comma to add)</span>
+                </label>
+                <div className="border rounded-lg px-3 py-2 focus-within:ring-2 focus-within:ring-primary/30 focus-within:border-primary min-h-[42px] flex flex-wrap gap-1.5 items-center cursor-text"
+                  onClick={() => document.getElementById('skill-input')?.focus()}>
+                  {skills.map(s => (
+                    <span key={s} className="flex items-center gap-1 bg-primary/10 text-primary text-xs px-2 py-0.5 rounded-full">
+                      {s}
+                      <button type="button" onClick={() => setSkills(prev => prev.filter(x => x !== s))} className="hover:text-red-500">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                  <input
+                    id="skill-input"
+                    type="text"
+                    value={skillInput}
+                    onChange={e => setSkillInput(e.target.value)}
+                    onKeyDown={handleSkillKeyDown}
+                    onBlur={() => skillInput.trim() && addSkill(skillInput)}
+                    placeholder={skills.length === 0 ? 'e.g. React, Node.js, MySQL…' : ''}
+                    className="flex-1 min-w-[120px] outline-none text-sm bg-transparent"
+                  />
+                </div>
               </div>
 
               {formError && (
