@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { portalApi, uploadApi } from '@/lib/portalApi'
+import { ResumeUpload, type ParsedResumeData } from '@/components/ui/ResumeUpload'
 import { useCandidateAuth } from '@/contexts/CandidateAuthContext'
 import {
   User, Briefcase, GraduationCap, Award, Languages, FileText, ChevronDown,
@@ -332,6 +333,68 @@ export default function PortalProfilePage() {
     } finally {
       setAutofilling(false)
     }
+  }
+
+  function handleResumeParseComplete(parsed: ParsedResumeData) {
+    // Pre-fill personal state with non-null values from parsed data
+    setPersonal((prev: any) => ({
+      ...prev,
+      full_name:              parsed.full_name              || prev.full_name,
+      middle_name:            parsed.middle_name            || prev.middle_name,
+      last_name:              parsed.last_name              || prev.last_name,
+      mobile:                 parsed.mobile                 || prev.mobile,
+      linkedin_url:           parsed.linkedin_url           || prev.linkedin_url,
+      github_url:             parsed.github_url             || prev.github_url,
+      portfolio_url:          parsed.portfolio_url          || prev.portfolio_url,
+      current_company:        parsed.current_company        || prev.current_company,
+      current_designation:    parsed.current_designation    || prev.current_designation,
+      total_experience_years: parsed.total_experience_years ?? prev.total_experience_years,
+      current_location:       parsed.current_location       || prev.current_location,
+      professional_summary:   parsed.professional_summary   || prev.professional_summary,
+      career_objective:       parsed.career_objective       || prev.career_objective,
+    }))
+
+    // Batch-add skills, education, experience in background
+    ;(async () => {
+      for (const sk of (parsed.skills ?? [])) {
+        try { await portalApi.post('/me/skills', sk) } catch {}
+      }
+      for (const edu of (parsed.education ?? [])) {
+        try {
+          await portalApi.post('/me/education', {
+            qualification:  edu.qualification  ?? 'Bachelor',
+            degree:         edu.degree         ?? '',
+            specialization: edu.specialization ?? null,
+            institute:      edu.institute      ?? '',
+            university:     edu.university     ?? null,
+            passing_year:   edu.passing_year   ?? null,
+            percentage:     edu.percentage     ?? null,
+          })
+        } catch {}
+      }
+      for (const exp of (parsed.experience ?? [])) {
+        try {
+          await portalApi.post('/me/experience', {
+            company_name:          exp.company_name          ?? '',
+            designation:           exp.designation           ?? '',
+            joining_date:          exp.joining_date          ?? '2020-01-01',
+            relieving_date:        exp.relieving_date        ?? null,
+            is_current:            exp.is_current            ?? 0,
+            roles_responsibilities: exp.roles_responsibilities ?? null,
+          })
+        } catch {}
+      }
+      for (const cert of (parsed.certifications ?? [])) {
+        try {
+          await portalApi.post('/me/certifications', {
+            certification_name:   cert.certification_name   ?? '',
+            issuing_organization: cert.issuing_organization ?? '',
+            issue_date:           cert.issue_date           ?? null,
+          })
+        } catch {}
+      }
+      refreshCompletion()
+    })()
   }
 
   // ── Voice / Video intro recording ────────────────────────
@@ -760,6 +823,22 @@ export default function PortalProfilePage() {
                 <p className="text-sm text-gray-500 group-hover:text-violet-600">Click to upload your resume</p>
               </div>
             )}
+
+            {/* Smart resume upload — auto-fills entire profile */}
+            <div className="pt-4">
+              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-3">
+                Auto-fill from Resume
+              </p>
+              <ResumeUpload onParseComplete={handleResumeParseComplete} />
+              <div className="relative my-5">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-zinc-100 dark:border-zinc-800" />
+                </div>
+                <div className="relative flex justify-center text-xs">
+                  <span className="bg-white dark:bg-zinc-900 px-3 text-zinc-400">or upload manually below</span>
+                </div>
+              </div>
+            </div>
 
             <input ref={resumeInputRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={handleResumeChange} />
 

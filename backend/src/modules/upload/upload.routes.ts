@@ -51,6 +51,18 @@ const storage = multer.diskStorage({
   },
 })
 
+// Separate storage for media: prefixes filename with 'video-' or 'audio-'
+// so the saved URL encodes the type for correct player selection later.
+const mediaStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+  filename: (_req, file, cb) => {
+    const ext    = path.extname(file.originalname).toLowerCase() || '.webm'
+    const base   = file.mimetype.split(';')[0].trim()
+    const prefix = base.startsWith('video/') ? 'video' : 'audio'
+    cb(null, `${prefix}-${crypto.randomUUID()}${ext}`)
+  },
+})
+
 const photoUpload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 },   // 5 MB
@@ -75,14 +87,16 @@ const resumeUpload = multer({
 })
 
 const mediaUpload = multer({
-  storage,
+  storage: mediaStorage,
   limits: { fileSize: 25 * 1024 * 1024 },  // 25 MB
   fileFilter: (_req, file, cb) => {
+    // Strip codec params (e.g. 'audio/webm;codecs=opus' → 'audio/webm') before matching
+    const base = file.mimetype.split(';')[0].trim()
     const allowed = [
       'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/mp4', 'audio/m4a',
-      'audio/webm', 'video/mp4', 'video/webm', 'video/quicktime',
+      'audio/webm', 'audio/ogg', 'video/mp4', 'video/webm', 'video/quicktime',
     ]
-    if (allowed.includes(file.mimetype)) cb(null, true)
+    if (allowed.includes(base)) cb(null, true)
     else cb(new Error('Only MP3, WAV, M4A, MP4 or WEBM files are allowed'))
   },
 })
@@ -113,15 +127,34 @@ async function callClaude(prompt: string): Promise<string> {
   return data.content[0].text as string
 }
 
+// ── Regex-based resume parser (fallback when AI key is absent) ─
+function parseResumeWithRegex(text: string): Record<string, unknown> {
+  const emailMatch    = text.match(/[\w.+%-]+@[\w.-]+\.[a-zA-Z]{2,6}/)
+  const mobileMatch   = text.match(/(?:\+91[\s-]?)?[6-9]\d{9}/)
+  const linkedinMatch = text.match(/linkedin\.com\/in\/([\w%-]+)/i)
+  const githubMatch   = text.match(/github\.com\/([\w-]+)/i)
+  return {
+    full_name: null, email: emailMatch?.[0] ?? null,
+    mobile: mobileMatch?.[0]?.replace(/\D/g, '').slice(-10) ?? null,
+    linkedin_url: linkedinMatch ? `https://www.linkedin.com/in/${linkedinMatch[1]}` : null,
+    github_url:   githubMatch   ? `https://github.com/${githubMatch[1]}`            : null,
+    skills: [], education: [], experience: [], certifications: [],
+  }
+}
+
 // ── PDF text extractor ───────────────────────────────────────
 async function extractPdfText(filePath: string): Promise<string> {
+  let parser: any
   try {
-    const pdfParse = (await import('pdf-parse')).default
+    const { PDFParse } = await import('pdf-parse')
     const buffer   = fs.readFileSync(filePath)
-    const result   = await pdfParse(buffer)
+    parser = new PDFParse({ data: buffer })
+    const result   = await parser.getText()
     return result.text?.slice(0, 6000) ?? ''
   } catch {
     return ''
+  } finally {
+    await parser?.destroy?.()
   }
 }
 
@@ -207,6 +240,7 @@ uploadRouter.post('/resume', requireCandidate, resumeUpload.single('resume'), as
 // POST /api/v1/upload/parse-resume  — AI auto-fill
 // ════════════════════════════════════════════════════════════
 uploadRouter.post('/parse-resume', requireCandidate, async (req: any, res, next) => {
+  let resumeText = ''
   try {
     const [rows] = await db.execute<RowDataPacket[]>(
       'SELECT resume_text, full_name, email, mobile FROM bmi_candidate WHERE id = ?',
@@ -216,6 +250,7 @@ uploadRouter.post('/parse-resume', requireCandidate, async (req: any, res, next)
     if (!candidate?.resume_text) {
       return res.status(400).json({ success: false, message: 'No resume text found. Please upload a PDF resume first.' })
     }
+    resumeText = candidate.resume_text
 
     const prompt = `You are a professional resume parser. Extract structured information from the resume text below.
 
@@ -242,7 +277,7 @@ Return ONLY a valid JSON object with these exact keys (use null for missing fiel
 }
 
 Resume Text:
-${candidate.resume_text}
+${resumeText}
 
 Return ONLY the JSON object. No explanation, no markdown, no code blocks.`
 
@@ -259,10 +294,167 @@ Return ONLY the JSON object. No explanation, no markdown, no code blocks.`
     res.json({ success: true, message: 'Resume parsed successfully by AI', data: parsed })
   } catch (err: any) {
     if (err.message === 'AI not configured') {
-      return res.status(503).json({ success: false, message: 'AI service not configured. Please fill the form manually.' })
+      // AI key absent — fall back to regex extraction so the button still works
+      const fallback = parseResumeWithRegex(resumeText)
+      return res.json({
+        success: true,
+        message: 'Resume parsed (basic mode). Add ANTHROPIC_API_KEY to .env for full AI parsing.',
+        data: fallback,
+      })
     }
     next(err)
   }
+})
+
+// ════════════════════════════════════════════════════════════
+// POST /api/v1/upload/parse-resume-file — direct upload + AI parse (PDF or DOCX)
+// ════════════════════════════════════════════════════════════
+const directParseUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ]
+    if (allowed.includes(file.mimetype)) cb(null, true)
+    else cb(new Error('Only PDF, DOC or DOCX files are allowed'))
+  },
+})
+
+async function extractTextFromBuffer(buffer: Buffer, mimetype: string): Promise<string> {
+  if (mimetype === 'application/pdf') {
+    try {
+      // pdf-parse v2 default export
+      const mod = await import('pdf-parse')
+      const pdfParse = (mod as any).default ?? mod
+      const data = await pdfParse(buffer)
+      return ((data as any).text ?? '').slice(0, 8000)
+    } catch { return '' }
+  }
+  // DOCX
+  try {
+    const mammoth = await import('mammoth')
+    const result = await (mammoth as any).extractRawText({ buffer })
+    return ((result as any).value ?? '').slice(0, 8000)
+  } catch { return '' }
+}
+
+async function parseWithAffinda(text: string): Promise<Record<string, unknown>> {
+  const apiKey = process.env.AFFINDA_API_KEY
+  if (!apiKey) throw new Error('Affinda API key not configured. Set AFFINDA_API_KEY in .env')
+  const res = await fetch('https://api.affinda.com/v3/documents', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rawText: text }),
+  })
+  if (!res.ok) throw new Error(`Affinda API error: ${res.status} ${res.statusText}`)
+  const json = await res.json() as any
+  const d = json.data ?? {}
+  return {
+    full_name:              d.name?.raw ?? null,
+    email:                  d.emails?.[0] ?? null,
+    mobile:                 d.phoneNumbers?.[0] ?? null,
+    current_location:       d.location?.formatted ?? null,
+    linkedin_url:           d.linkedin ?? null,
+    current_designation:    d.profession ?? null,
+    current_company:        d.workExperience?.[0]?.organization ?? null,
+    total_experience_years: d.totalYearsExperience ?? null,
+    professional_summary:   d.summary ?? null,
+    skills: (d.skills ?? []).map((s: any) => ({ skill_name: s.name ?? String(s), skill_level: 'intermediate' })),
+    education: (d.education ?? []).map((e: any) => ({
+      qualification: e.accreditation?.educationLevel ?? 'Bachelor',
+      degree:        e.accreditation?.inputStr ?? '',
+      institute:     e.organization ?? '',
+      passing_year:  e.dates?.completionDate ? new Date(e.dates.completionDate).getFullYear() : null,
+    })),
+    experience: (d.workExperience ?? []).map((w: any) => ({
+      company_name:          w.organization ?? '',
+      designation:           w.jobTitle ?? '',
+      joining_date:          w.dates?.startDate ?? '2020-01-01',
+      relieving_date:        w.dates?.endDate ?? null,
+      is_current:            w.dates?.isCurrent ? 1 : 0,
+      roles_responsibilities: w.jobDescription ?? null,
+    })),
+    certifications: [],
+  }
+}
+
+uploadRouter.post('/parse-resume-file', requireCandidate, directParseUpload.single('resume'), async (req: any, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' })
+
+    const rawText = await extractTextFromBuffer(req.file.buffer, req.file.mimetype)
+    if (!rawText.trim()) {
+      return res.status(422).json({
+        success: false,
+        message: 'Could not extract text from the file. Make sure the PDF has selectable text (not a scanned image).',
+      })
+    }
+
+    const engine = process.env.RESUME_PARSER ?? 'claude'
+    let parsed: Record<string, unknown>
+
+    if (engine === 'affinda') {
+      parsed = await parseWithAffinda(rawText)
+    } else {
+      const prompt = `Extract structured data from this resume and return ONLY a valid JSON object. No markdown fences, no commentary.
+
+{
+  "full_name": "string or null",
+  "middle_name": "string or null",
+  "last_name": "string or null",
+  "email": "string or null",
+  "mobile": "10-digit string or null",
+  "current_location": "City, State or null",
+  "linkedin_url": "full https URL or null",
+  "github_url": "full https URL or null",
+  "portfolio_url": "full https URL or null",
+  "current_designation": "string or null",
+  "current_company": "string or null",
+  "total_experience_years": number or null,
+  "professional_summary": "max 500 chars or null",
+  "career_objective": "max 400 chars or null",
+  "skills": [{"skill_name": "string", "skill_level": "beginner|intermediate|advanced|expert"}],
+  "education": [{"qualification": "Bachelor|Master|PhD|Diploma|10th|12th", "degree": "string", "specialization": "string or null", "institute": "string", "university": "string or null", "passing_year": number or null, "percentage": number or null}],
+  "experience": [{"company_name": "string", "designation": "string", "joining_date": "YYYY-MM-01", "relieving_date": "YYYY-MM-01 or null", "is_current": 0, "roles_responsibilities": "string or null"}],
+  "certifications": [{"certification_name": "string", "issuing_organization": "string", "issue_date": "YYYY-MM-DD or null"}]
+}
+
+Rules:
+- List ALL skills mentioned anywhere in the resume.
+- Experience: most recent job first. Set is_current=1 only for the current employer.
+- Dates: YYYY-MM-DD. If only year given, use YYYY-01-01. If month+year, use YYYY-MM-01.
+- Use null for anything absent from the resume.
+
+Resume text:
+${rawText}`
+
+      const aiText = await callClaude(prompt)
+      const clean  = aiText.replace(/```json\s*|\s*```/g, '').trim()
+      try { parsed = JSON.parse(clean) }
+      catch { return res.status(422).json({ success: false, message: 'AI could not parse the resume. Please fill in your details manually.' }) }
+    }
+
+    res.json({ success: true, message: 'Resume parsed successfully', data: parsed })
+  } catch (err: any) {
+    if (err.message?.includes('AI not configured') || err.message?.includes('Affinda')) {
+      return res.status(503).json({ success: false, message: err.message })
+    }
+    next(err)
+  }
+})
+
+// ════════════════════════════════════════════════════════════
+// POST /api/v1/upload/company-media  — client company photo upload
+// ════════════════════════════════════════════════════════════
+uploadRouter.post('/company-media', requireAdmin, photoUpload.single('photo'), async (req: any, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' })
+    const url = fileUrl(req.file.filename)
+    res.json({ success: true, message: 'Photo uploaded', data: { url } })
+  } catch (err) { next(err) }
 })
 
 // ════════════════════════════════════════════════════════════
