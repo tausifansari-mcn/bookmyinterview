@@ -23,6 +23,7 @@ interface IconSidebarProps {
   logoSrc?: string
   notificationItems?: NotificationItem[]
   onMarkAllRead?: () => void
+  onOpenChange?: (open: boolean) => void
 }
 
 function getInitials(name: string): string {
@@ -63,8 +64,9 @@ export function IconSidebar({
   logoSrc,
   notificationItems = [],
   onMarkAllRead,
+  onOpenChange,
 }: IconSidebarProps) {
-  const [isOpen, setIsOpen]       = useState(false)
+  const [isOpen, setIsOpen]       = useState(true)
   const [isDark, setIsDark]       = useState(() => document.documentElement.classList.contains('dark'))
   const [cmdOpen, setCmdOpen]     = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
@@ -237,7 +239,7 @@ export function IconSidebar({
           {/* Expand/collapse toggle */}
           <SideTooltip label="Expand sidebar" show={!isOpen}>
             <button
-              onClick={() => setIsOpen(o => !o)}
+              onClick={() => { const next = !isOpen; setIsOpen(next); onOpenChange?.(next) }}
               className="flex items-center gap-3 w-full px-2 py-2 rounded-lg text-zinc-600 hover:bg-zinc-800 hover:text-white transition-all"
             >
               {isOpen

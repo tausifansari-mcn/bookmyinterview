@@ -19,6 +19,7 @@ export default function ClientLayout() {
   const navigate  = useNavigate()
   const location  = useLocation()
   const [notifs]  = useState<NotificationItem[]>([])
+  const [sidebarOpen, setSidebarOpen] = useState(true)
 
   useEffect(() => {
     if (localStorage.getItem('bmi_dark_mode') === '1') {
@@ -43,9 +44,10 @@ export default function ClientLayout() {
         brandLabel={tenant?.company_name ?? 'Book My Interview'}
         logoSrc={tenant?.logo_url ?? undefined}
         notificationItems={notifs}
+        onOpenChange={setSidebarOpen}
       />
 
-      <div className="flex-1 md:pl-[52px] flex flex-col min-h-screen">
+      <div className={cn("flex-1 flex flex-col min-h-screen transition-[padding] duration-200 ease-in-out", sidebarOpen ? "md:pl-[220px]" : "md:pl-[52px]")}>
         <main className="flex-1 px-4 sm:px-6 py-6">
           <Outlet />
         </main>

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Outlet, NavLink, Navigate, useNavigate } from 'react-router-dom'
 import { useCandidateAuth } from '@/contexts/CandidateAuthContext'
 import { IconSidebar, NavItem } from '@/components/layout/IconSidebar'
@@ -15,6 +15,7 @@ const NAV: NavItem[] = [
 export default function PortalLayout() {
   const { candidate, logout } = useCandidateAuth()
   const navigate = useNavigate()
+  const [sidebarOpen, setSidebarOpen] = useState(true)
 
   useEffect(() => {
     if (localStorage.getItem('bmi_dark_mode') === '1') {
@@ -34,9 +35,10 @@ export default function PortalLayout() {
         userEmail={candidate.email ?? ''}
         onLogout={handleLogout}
         brandLabel="Book My Interview"
+        onOpenChange={setSidebarOpen}
       />
 
-      <div className="flex-1 md:pl-[52px] flex flex-col min-h-screen">
+      <div className={cn("flex-1 flex flex-col min-h-screen transition-[padding] duration-200 ease-in-out", sidebarOpen ? "md:pl-[220px]" : "md:pl-[52px]")}>
         <main className="flex-1 px-4 sm:px-6 py-6">
           <Outlet />
         </main>
