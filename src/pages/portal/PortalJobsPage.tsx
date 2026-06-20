@@ -111,7 +111,7 @@ export default function PortalJobsPage() {
               <Link
                 key={job.id}
                 to={`/portal/jobs/${job.id}`}
-                className="group bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-5 hover:border-indigo-300 hover:shadow-md transition-all flex flex-col gap-4"
+                className="group bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-5 hover:border-indigo-300 hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 flex flex-col gap-4"
               >
                 <div className="flex items-start gap-3">
                   <div className="h-10 w-10 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 flex items-center justify-center overflow-hidden shrink-0">
@@ -168,7 +168,7 @@ export default function PortalJobsPage() {
           <button
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-zinc-600 border border-zinc-200 rounded-lg hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-zinc-600 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             <ChevronLeft className="h-4 w-4" /> Prev
           </button>
@@ -176,7 +176,7 @@ export default function PortalJobsPage() {
           <button
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-zinc-600 border border-zinc-200 rounded-lg hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-zinc-600 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             Next <ChevronRight className="h-4 w-4" />
           </button>

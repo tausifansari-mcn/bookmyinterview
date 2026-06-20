@@ -1,14 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
-import { portalApi } from '@/lib/portalApi'
+import { portalApi, uploadApi } from '@/lib/portalApi'
 import { useCandidateAuth } from '@/contexts/CandidateAuthContext'
 import {
   User, Briefcase, GraduationCap, Award, Languages, FileText, ChevronDown,
   Plus, Trash2, Loader2, CheckCircle2, Star, X,
   Camera, Upload, Mic, Video, Square, RotateCcw, Zap, Link2, MapPin,
-  Phone, Mail, Globe, Edit3, Save, Bookmark, MessageSquare
+  Phone, Mail, Globe, Edit3, Save, Bookmark, MessageSquare, Sparkles
 } from 'lucide-react'
+
+import { toast } from 'sonner'
 
 // ── auth header helper ────────────────────────────────────────
 const authHdr = () => ({
@@ -146,12 +148,14 @@ function LevelBadge({ level }: { level: string }) {
 export default function PortalProfilePage() {
   const { candidate, updateCandidate } = useCandidateAuth()
   const navigate = useNavigate()
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const [toastState, setToastState] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [completion, setCompletion] = useState(0)
+  const [autofilling, setAutofilling] = useState(false)
+  const [autofillDone, setAutofillDone] = useState(false)
 
   function showToast(msg: string, type: 'success' | 'error' = 'success') {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 3500)
+    setToastState({ msg, type })
+    setTimeout(() => setToastState(null), 3500)
   }
 
   async function refreshCompletion() {
@@ -251,6 +255,83 @@ export default function PortalProfilePage() {
       setParseStep('done')
     } catch (err: any) { showToast(err?.response?.data?.message ?? 'AI parsing failed', 'error'); setParseStep('ready') }
     finally { setParsingAI(false) }
+  }
+
+  async function handleAutofill() {
+    setAutofilling(true)
+    setAutofillDone(false)
+    try {
+      const res = await uploadApi.post('/parse-resume')
+      const parsed = res.data.data
+
+      // Update basic profile fields
+      const basicPatch: Record<string, any> = {}
+      const fieldMap: Record<string, string> = {
+        full_name: 'full_name', middle_name: 'middle_name', last_name: 'last_name',
+        linkedin_url: 'linkedin_url', github_url: 'github_url', portfolio_url: 'portfolio_url',
+        current_company: 'current_company', current_designation: 'current_designation',
+        current_location: 'current_location', professional_summary: 'professional_summary',
+        career_objective: 'career_objective',
+      }
+      for (const [parsedKey, profileKey] of Object.entries(fieldMap)) {
+        if (parsed[parsedKey]) basicPatch[profileKey] = parsed[parsedKey]
+      }
+      if (parsed.total_experience_years != null) {
+        basicPatch.experience_years = parsed.total_experience_years
+        basicPatch.total_experience_years = parsed.total_experience_years
+      }
+      if (Object.keys(basicPatch).length > 0) {
+        await portalApi.patch('/me', basicPatch)
+      }
+
+      // Batch-add skills
+      if (Array.isArray(parsed.skills) && parsed.skills.length > 0) {
+        await Promise.allSettled(parsed.skills.slice(0, 20).map((s: any) =>
+          portalApi.post('/me/skills', {
+            skill_name: s.skill_name,
+            skill_level: s.skill_level ?? 'intermediate',
+          })
+        ))
+      }
+
+      // Batch-add education
+      if (Array.isArray(parsed.education) && parsed.education.length > 0) {
+        await Promise.allSettled(parsed.education.slice(0, 5).map((e: any) =>
+          portalApi.post('/me/education', {
+            qualification: e.qualification ?? 'Bachelor',
+            degree: e.degree ?? 'Unknown',
+            specialization: e.specialization ?? null,
+            institute: e.institute ?? 'Unknown',
+            university: e.university ?? null,
+            passing_year: e.passing_year ?? null,
+            percentage: e.percentage ?? null,
+          })
+        ))
+      }
+
+      // Batch-add work experience
+      if (Array.isArray(parsed.experience) && parsed.experience.length > 0) {
+        await Promise.allSettled(parsed.experience.slice(0, 5).map((ex: any, i: number) =>
+          portalApi.post('/me/experience', {
+            company_name: ex.company_name ?? 'Unknown',
+            designation: ex.designation ?? 'Unknown',
+            joining_date: ex.joining_date ?? '2020-01-01',
+            relieving_date: ex.relieving_date ?? null,
+            is_current: ex.is_current ?? (i === 0 ? 1 : 0),
+            roles_responsibilities: ex.roles_responsibilities ?? null,
+          })
+        ))
+      }
+
+      setAutofillDone(true)
+      toast.success('Profile auto-filled from resume! Review each section and save.')
+      // Reload profile data
+      setTimeout(() => window.location.reload(), 1500)
+    } catch (err: any) {
+      toast.error(err.response?.data?.message ?? 'Auto-fill failed. Please upload a PDF resume first.')
+    } finally {
+      setAutofilling(false)
+    }
   }
 
   // ── Voice / Video intro recording ────────────────────────
@@ -707,6 +788,29 @@ export default function PortalProfilePage() {
                   <Loader2 className="h-3.5 w-3.5 animate-spin" /> Reading your resume…
                 </span>
               )}
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+              <p className="text-xs text-zinc-500 mb-3">Uploaded a PDF resume? Auto-fill your profile in one click.</p>
+              <button
+                onClick={handleAutofill}
+                disabled={autofilling}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-semibold rounded-lg transition-colors"
+              >
+                {autofilling ? (
+                  <>
+                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Auto-filling…
+                  </>
+                ) : autofillDone ? (
+                  <>✓ Auto-filled!</>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    Auto-fill from Resume
+                  </>
+                )}
+              </button>
             </div>
           </div>
 
@@ -1309,7 +1413,7 @@ export default function PortalProfilePage() {
 
         {/* Bottom spacer */}
         <div className="h-8" />
-      {toast && <Toast msg={toast.msg} type={toast.type} />}
+      {toastState && <Toast msg={toastState.msg} type={toastState.type} />}
     </div>
   )
 }
