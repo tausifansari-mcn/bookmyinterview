@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { portalApi } from '@/lib/portalApi'
 import { useCandidateAuth } from '@/contexts/CandidateAuthContext'
 import {
   User, Briefcase, GraduationCap, Award, Languages, FileText, ChevronDown,
-  Plus, Trash2, Loader2, CheckCircle2, Sparkles, LogOut, Home, Star, X,
+  Plus, Trash2, Loader2, CheckCircle2, Star, X,
   Camera, Upload, Mic, Video, Square, RotateCcw, Zap, Link2, MapPin,
-  Phone, Mail, Globe, Edit3, Save
+  Phone, Mail, Globe, Edit3, Save, Bookmark, MessageSquare
 } from 'lucide-react'
 
 // ── auth header helper ────────────────────────────────────────
@@ -36,28 +36,28 @@ function CompletionRing({ pct }: { pct: number }) {
 function Section({ title, icon: Icon, children, defaultOpen = true, accent = 'indigo' }: any) {
   const [open, setOpen] = useState(defaultOpen)
   const colors: Record<string, string> = {
-    indigo: 'bg-indigo-100 text-indigo-600',
-    violet: 'bg-violet-100 text-violet-600',
+    indigo:  'bg-indigo-100 text-indigo-600',
+    violet:  'bg-violet-100 text-violet-600',
     emerald: 'bg-emerald-100 text-emerald-600',
     amber:   'bg-amber-100 text-amber-600',
     rose:    'bg-rose-100 text-rose-600',
     sky:     'bg-sky-100 text-sky-600',
   }
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden transition-shadow hover:shadow-md">
+    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
       <button onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50/80 transition-colors">
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
         <div className="flex items-center gap-3">
-          <div className={`h-9 w-9 rounded-xl flex items-center justify-center ${colors[accent] ?? colors.indigo}`}>
+          <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${colors[accent] ?? colors.indigo}`}>
             <Icon className="h-4.5 w-4.5" style={{ width: 18, height: 18 }} />
           </div>
-          <span className="font-semibold text-gray-800 text-[15px]">{title}</span>
+          <span className="text-sm font-semibold text-zinc-900 dark:text-white">{title}</span>
         </div>
         <div className={`h-6 w-6 rounded-full flex items-center justify-center transition-transform ${open ? 'rotate-180' : ''}`}>
           <ChevronDown className="h-4 w-4 text-gray-400" />
         </div>
       </button>
-      {open && <div className="px-6 pb-6 border-t border-gray-100 bg-white">{children}</div>}
+      {open && <div className="px-5 pb-5 border-t border-zinc-100 dark:border-zinc-800">{children}</div>}
     </div>
   )
 }
@@ -144,7 +144,7 @@ function LevelBadge({ level }: { level: string }) {
 // Main component
 // ════════════════════════════════════════════════════════════════
 export default function PortalProfilePage() {
-  const { candidate, logout, updateCandidate } = useCandidateAuth()
+  const { candidate, updateCandidate } = useCandidateAuth()
   const navigate = useNavigate()
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [completion, setCompletion] = useState(0)
@@ -267,6 +267,23 @@ export default function PortalProfilePage() {
   const liveVideoRef                        = useRef<HTMLVideoElement>(null)
   const streamRef                           = useRef<MediaStream|null>(null)
 
+  // Auto-stop when the 60-second limit is reached
+  useEffect(() => {
+    if (recording && recordingTime >= 60) {
+      mediaRecorderRef.current?.stop()
+      setRecording(false)
+      clearInterval(timerRef.current)
+    }
+  }, [recordingTime, recording])
+
+  // Release camera/mic if the user navigates away mid-recording
+  useEffect(() => {
+    return () => {
+      clearInterval(timerRef.current)
+      streamRef.current?.getTracks().forEach(t => t.stop())
+    }
+  }, [])
+
   function getBestMimeType(isVideo: boolean): string {
     const types = isVideo
       ? ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9', 'video/webm', 'video/mp4']
@@ -299,10 +316,7 @@ export default function PortalProfilePage() {
       mediaRecorderRef.current = mr
       setRecording(true); setRecordingTime(0); setRecordedBlob(null); setRecordedUrl('')
       timerRef.current = setInterval(() => {
-        setRecordingTime(t => {
-          if (t >= 60) { stopRecording(); return t }
-          return t + 1
-        })
+        setRecordingTime(t => t + 1)
       }, 1000)
     } catch (err: any) {
       const name = err?.name ?? ''
@@ -329,7 +343,8 @@ export default function PortalProfilePage() {
     setUploadingMedia(true)
     try {
       const fd = new FormData()
-      fd.append('media', recordedBlob, `intro.webm`)
+      const blobExt = recordedBlob.type.split(';')[0].split('/')[1] || 'webm'
+      fd.append('media', recordedBlob, `intro.${blobExt}`)
       fd.append('duration', String(recordingTime))
       const { data } = await axios.post('/api/v1/upload/media', fd, { headers: authHdr() })
       setMediaUrl(data.data.url)
@@ -355,7 +370,7 @@ export default function PortalProfilePage() {
       const d = r.data.data
       setPersonal(d)
       if (d.profile_photo_url) setPhotoUrl(d.profile_photo_url)
-      if (d.resume_url)        { setResumeUrl(d.resume_url); setParseStep('ready') }
+      if (d.resume_url)        { setResumeUrl(d.resume_url); setParseStep(d.resume_text ? 'ready' : 'idle') }
       if (d.voice_intro_url)   setMediaUrl(d.voice_intro_url)
     }).catch(() => {})
     refreshCompletion()
@@ -491,50 +506,53 @@ export default function PortalProfilePage() {
     finally { setSavingLang(false) }
   }
 
-  function handleLogout() { logout(); navigate('/portal/login') }
+  const [savedJobs, setSavedJobs]               = useState<any[]>([])
+  const [loadingSavedJobs, setLoadingSavedJobs] = useState(false)
+
+  useEffect(() => {
+    setLoadingSavedJobs(true)
+    portalApi.get('/saved-jobs')
+      .then(r => setSavedJobs(r.data.data))
+      .catch(() => {})
+      .finally(() => setLoadingSavedJobs(false))
+  }, [])
+
+  async function unsaveJob(jobId: string | number) {
+    await portalApi.delete(`/saved-jobs/${jobId}`)
+    setSavedJobs(prev => prev.filter(j => j.id !== jobId))
+    showToast('Job removed from saved list')
+  }
+
+  const [fbType, setFbType]       = useState('suggestion')
+  const [fbRating, setFbRating]   = useState(0)
+  const [fbMessage, setFbMessage] = useState('')
+  const [submittingFb, setSubmittingFb] = useState(false)
+
+  async function submitFeedback(e: React.FormEvent) {
+    e.preventDefault()
+    if (fbMessage.trim().length < 10) { showToast('Message must be at least 10 characters', 'error'); return }
+    setSubmittingFb(true)
+    try {
+      await portalApi.post('/feedback', { feedback_type: fbType, rating: fbRating || undefined, message: fbMessage.trim(), page_context: 'profile' })
+      showToast('Thank you for your feedback! 🎉')
+      setFbType('suggestion'); setFbRating(0); setFbMessage('')
+    } catch (err: any) { showToast(err?.response?.data?.message ?? 'Failed to submit feedback', 'error') }
+    finally { setSubmittingFb(false) }
+  }
+
   const fmtDate = (d?: string) => d ? d.split('T')[0] : ''
   const completionColor = completion >= 80 ? 'bg-emerald-500' : completion >= 50 ? 'bg-amber-400' : 'bg-indigo-500'
 
   // ── Render ────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
+    <div className="space-y-5">
 
       {/* ── Top Nav ────────────────────────────────────────── */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-gray-200/60 sticky top-0 z-20 shadow-sm">
-        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center shadow-md">
-              <Sparkles className="h-4 w-4 text-white" />
-            </div>
-            <span className="font-bold text-gray-900 tracking-tight">Book My Interview</span>
-          </div>
-          <nav className="flex items-center gap-1">
-            <Link to="/portal/dashboard"
-              className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-indigo-600 px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors font-medium">
-              <Home className="h-3.5 w-3.5" /> Dashboard
-            </Link>
-            <Link to="/portal/jobs"
-              className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-indigo-600 px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors font-medium">
-              <Briefcase className="h-3.5 w-3.5" /> Jobs
-            </Link>
-            <Link to="/portal/applications"
-              className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-indigo-600 px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors font-medium">
-              <FileText className="h-3.5 w-3.5" /> Applications
-            </Link>
-            <button onClick={handleLogout}
-              className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-600 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors ml-1">
-              <LogOut className="h-3.5 w-3.5" />
-            </button>
-          </nav>
-        </div>
-      </header>
-
-      <main className="max-w-5xl mx-auto px-4 py-7 space-y-5">
 
         {/* ── Hero Card ──────────────────────────────────────── */}
-        <div className="relative rounded-3xl overflow-hidden shadow-xl">
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden relative">
           {/* Gradient background */}
-          <div className="absolute inset-0 bg-gradient-to-br from-indigo-900 via-indigo-800 to-violet-900" />
+          <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, #6366f1, #4f46e5)' }} />
           <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48cGF0dGVybiBpZD0iZyIgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiPjxjaXJjbGUgY3g9IjUwIiBjeT0iNTAiIHI9IjEiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4wNSkiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZykiLz48L3N2Zz4=')] opacity-40" />
 
           <div className="relative px-8 py-8">
@@ -708,7 +726,7 @@ export default function PortalProfilePage() {
             {mediaUrl && !recordedUrl && (
               <div className="mb-3 p-3 bg-rose-50 border border-rose-200 rounded-xl">
                 <p className="text-xs text-gray-500 mb-2 font-medium">Saved introduction</p>
-                {mediaUrl.includes('video') ? (
+                {mediaUrl.split('/').pop()?.startsWith('video-') ? (
                   <video src={mediaUrl} controls className="w-full rounded-lg max-h-28" />
                 ) : (
                   <audio src={mediaUrl} controls className="w-full" />
@@ -1176,10 +1194,121 @@ export default function PortalProfilePage() {
           </div>
         </Section>
 
+        {/* ── SAVED JOBS ────────────────────────────────────── */}
+        <Section title="Saved Jobs" icon={Bookmark} defaultOpen={true} accent="sky">
+          <div className="mt-5">
+            {loadingSavedJobs ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-6 w-6 text-sky-500 animate-spin" />
+              </div>
+            ) : savedJobs.length === 0 ? (
+              <div className="text-center py-8 text-gray-400 text-sm">
+                No saved jobs yet. Browse jobs and bookmark roles you're interested in.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {savedJobs.map(job => {
+                  const skills: string[] = (() => {
+                    if (!job.skills_required) return []
+                    if (Array.isArray(job.skills_required)) return job.skills_required
+                    try { return JSON.parse(job.skills_required) } catch { return [] }
+                  })()
+                  const workModeLabel: Record<string, string> = { remote: 'Remote', hybrid: 'Hybrid', onsite: 'On-site', on_site: 'On-site' }
+                  const savedDate = job.saved_at ? new Date(job.saved_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
+                  return (
+                    <div key={job.saved_id ?? job.id} className="flex items-start justify-between gap-4 p-4 rounded-xl bg-sky-50/60 border border-sky-100 hover:border-sky-200 transition-colors">
+                      <div className="flex gap-3 min-w-0">
+                        <div className="shrink-0 h-12 w-12 rounded-xl overflow-hidden border border-sky-100 bg-white flex items-center justify-center">
+                          {job.company_logo_url ? (
+                            <img src={job.company_logo_url} alt={job.company_name} className="h-full w-full object-contain" />
+                          ) : (
+                            <div className="h-full w-full bg-gradient-to-br from-sky-400 to-indigo-500 flex items-center justify-center text-white font-bold text-lg">
+                              {(job.company_name ?? 'C').charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-gray-900 text-sm leading-tight truncate">{job.title}</p>
+                          <p className="text-xs text-indigo-600 font-medium mt-0.5">{job.company_name}</p>
+                          <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                            {job.work_mode && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 font-semibold border border-sky-200">
+                                {workModeLabel[job.work_mode] ?? job.work_mode}
+                              </span>
+                            )}
+                            {job.location_city && (
+                              <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
+                                <MapPin className="h-2.5 w-2.5" />{job.location_city}
+                              </span>
+                            )}
+                            {savedDate && (
+                              <span className="text-[10px] text-gray-400">Saved {savedDate}</span>
+                            )}
+                          </div>
+                          {skills.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {skills.slice(0, 4).map((s: string) => (
+                                <span key={s} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{s}</span>
+                              ))}
+                              {skills.length > 4 && <span className="text-[10px] text-gray-400">+{skills.length - 4}</span>}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <button onClick={() => unsaveJob(job.id)} title="Remove from saved"
+                        className="shrink-0 p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </Section>
+
+        {/* ── SHARE FEEDBACK ────────────────────────────────── */}
+        <Section title="Share Feedback" icon={MessageSquare} defaultOpen={false} accent="rose">
+          <form onSubmit={submitFeedback} className="mt-5 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Select label="Feedback Type" value={fbType} onChange={setFbType}
+                options={[
+                  { value: 'bug',        label: 'Bug Report' },
+                  { value: 'suggestion', label: 'Suggestion' },
+                  { value: 'complaint',  label: 'Complaint' },
+                  { value: 'praise',     label: 'Praise' },
+                  { value: 'other',      label: 'Other' },
+                ]} />
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Rating (optional)</label>
+                <div className="flex gap-1.5">
+                  {[1, 2, 3, 4, 5].map(n => (
+                    <button key={n} type="button" onClick={() => setFbRating(fbRating === n ? 0 : n)}
+                      className="focus:outline-none transition-transform hover:scale-110">
+                      <Star className={`h-6 w-6 ${n <= fbRating ? 'text-amber-400 fill-amber-400' : 'text-gray-300'}`} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                Message <span className="text-red-500">*</span>
+              </label>
+              <textarea value={fbMessage} onChange={e => setFbMessage(e.target.value)} rows={4} required minLength={10}
+                placeholder="Tell us what you think — we read every message…"
+                className="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm outline-none transition-all resize-none focus:border-rose-400 focus:ring-3 focus:ring-rose-500/10 hover:border-gray-300" />
+              <p className="text-[11px] text-gray-400 text-right mt-1">{fbMessage.length} chars (min 10)</p>
+            </div>
+            <button type="submit" disabled={submittingFb}
+              className="px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white transition-all disabled:opacity-60 shadow-sm">
+              {submittingFb ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Sending…</> : <><MessageSquare className="h-3.5 w-3.5" />Submit Feedback</>}
+            </button>
+          </form>
+        </Section>
+
         {/* Bottom spacer */}
         <div className="h-8" />
-      </main>
-
       {toast && <Toast msg={toast.msg} type={toast.type} />}
     </div>
   )
