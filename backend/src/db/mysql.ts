@@ -10,6 +10,7 @@ export const db = mysql.createPool({
   connectionLimit:    env.DB_POOL_MAX,
   charset:            'utf8mb4',
   timezone:           '+05:30',
+  dateStrings:        ['DATE'],   // return DATE columns as 'YYYY-MM-DD' strings, not JS Date objects
   waitForConnections: true,
   queueLimit:         0,
   enableKeepAlive:    true,

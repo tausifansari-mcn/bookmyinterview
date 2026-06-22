@@ -112,10 +112,8 @@ export function IconSidebar({
       >
         {/* Brand */}
         <div className="flex items-center gap-3 h-14 px-3 shrink-0 border-b border-zinc-800">
-          <div className="h-7 w-7 rounded-lg bg-indigo-500 flex items-center justify-center shrink-0">
-            {logoSrc
-              ? <img src={logoSrc} alt="" className="h-6 w-6 rounded-md object-cover" />
-              : <span className="text-white text-xs font-bold">B</span>}
+          <div className="h-7 w-7 rounded-lg shrink-0 overflow-hidden">
+            <img src={logoSrc || '/logo.png'} alt="" className="h-full w-full object-cover" />
           </div>
           <motion.span
             animate={{ opacity: isOpen ? 1 : 0 }}

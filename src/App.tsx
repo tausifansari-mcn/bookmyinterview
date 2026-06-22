@@ -29,6 +29,7 @@ import SettingsPage             from '@/pages/settings/SettingsPage'
 import UsersPage                from '@/pages/settings/UsersPage'
 
 // ── Candidate portal pages ────────────────────────────────────────
+import PortalLandingPage     from '@/pages/portal/PortalLandingPage'
 import PortalLoginPage      from '@/pages/portal/PortalLoginPage'
 import PortalRegisterPage   from '@/pages/portal/PortalRegisterPage'
 import ForgotPasswordPage   from '@/pages/portal/ForgotPasswordPage'
@@ -38,9 +39,11 @@ import PortalDashboardPage  from '@/pages/portal/PortalDashboardPage'
 import PortalJobsPage       from '@/pages/portal/PortalJobsPage'
 import PortalApplicationsPage from '@/pages/portal/PortalApplicationsPage'
 import PortalProfilePage    from '@/pages/portal/PortalProfilePage'
-import PortalJobDetailPage  from '@/pages/portal/PortalJobDetailPage'
+import PortalJobDetailPage     from '@/pages/portal/PortalJobDetailPage'
+import PortalShortIntroPage  from '@/pages/portal/PortalShortIntroPage'
 
 // ── Client portal pages ───────────────────────────────────────────
+import ClientLandingPage          from '@/pages/client/ClientLandingPage'
 import ClientLoginPage           from '@/pages/client/ClientLoginPage'
 import ClientOnboardingPage      from '@/pages/client/ClientOnboardingPage'
 import ClientDashboardPage       from '@/pages/client/ClientDashboardPage'
@@ -50,6 +53,8 @@ import ClientSettingsPage        from '@/pages/client/ClientSettingsPage'
 import ClientAssessmentsPage     from '@/pages/client/ClientAssessmentsPage'
 import ClientApplicationsPage    from '@/pages/client/ClientApplicationsPage'
 import ClientCompanyProfilePage  from '@/pages/client/ClientCompanyProfilePage'
+import ClientJDRequestsPage      from '@/pages/client/ClientJDRequestsPage'
+import ClientInterviewsPage      from '@/pages/client/ClientInterviewsPage'
 
 // ── Super admin pages ─────────────────────────────────────────────
 import SuperAdminLoginPage        from '@/pages/super-admin/SuperAdminLoginPage'
@@ -57,8 +62,11 @@ import SuperAdminDashboardPage    from '@/pages/super-admin/SuperAdminDashboardP
 import SuperAdminClientsPage      from '@/pages/super-admin/SuperAdminClientsPage'
 import SuperAdminClientDetailPage from '@/pages/super-admin/SuperAdminClientDetailPage'
 import SuperAdminCandidatesPage   from '@/pages/super-admin/SuperAdminCandidatesPage'
-import SuperAdminAnalyticsPage    from '@/pages/super-admin/SuperAdminAnalyticsPage'
+// SuperAdminAnalyticsPage removed — analytics route redirects to dashboard
 import SuperAdminSettingsPage     from '@/pages/super-admin/SuperAdminSettingsPage'
+import SuperAdminJDRequestsPage   from '@/pages/super-admin/SuperAdminJDRequestsPage'
+import SuperAdminInterviewsPage   from '@/pages/super-admin/SuperAdminInterviewsPage'
+import SuperAdminQuestionBankPage from '@/pages/super-admin/SuperAdminQuestionBankPage'
 
 // ── Auth guard for internal recruiter portal ──────────────────────
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -109,12 +117,13 @@ export default function App() {
 
               {/* ── Candidate Portal: authenticated (shared layout) ── */}
               <Route path="/portal" element={<PortalLayout />}>
-                <Route index element={<Navigate to="/portal/dashboard" replace />} />
+                <Route index element={<PortalLandingPage />} />
                 <Route path="dashboard"    element={<PortalDashboardPage />} />
                 <Route path="jobs"         element={<PortalJobsPage />} />
                 <Route path="jobs/:id"     element={<PortalJobDetailPage />} />
                 <Route path="applications" element={<PortalApplicationsPage />} />
                 <Route path="profile"      element={<PortalProfilePage />} />
+                <Route path="intro"        element={<PortalShortIntroPage />} />
               </Route>
 
               {/* ── Client Portal: public (no layout) ────────────── */}
@@ -127,6 +136,8 @@ export default function App() {
                 <Route path="dashboard"       element={<ClientDashboardPage />} />
                 <Route path="jobs"            element={<ClientJobsPage />} />
                 <Route path="candidates"      element={<ClientCandidatesPage />} />
+                <Route path="jd-requests"     element={<ClientJDRequestsPage />} />
+                <Route path="interviews"      element={<ClientInterviewsPage />} />
                 <Route path="applications"    element={<ClientApplicationsPage />} />
                 <Route path="assessments"     element={<ClientAssessmentsPage />} />
                 <Route path="company-profile" element={<ClientCompanyProfilePage />} />
@@ -140,10 +151,13 @@ export default function App() {
               <Route path="/super-admin" element={<SuperAdminLayout />}>
                 <Route index element={<Navigate to="/super-admin/dashboard" replace />} />
                 <Route path="dashboard"    element={<SuperAdminDashboardPage />} />
+                <Route path="jd-requests"  element={<SuperAdminJDRequestsPage />} />
+                <Route path="interviews"   element={<SuperAdminInterviewsPage />} />
+                <Route path="question-bank" element={<SuperAdminQuestionBankPage />} />
                 <Route path="clients"      element={<SuperAdminClientsPage />} />
                 <Route path="clients/:id"  element={<SuperAdminClientDetailPage />} />
                 <Route path="candidates"   element={<SuperAdminCandidatesPage />} />
-                <Route path="analytics"    element={<SuperAdminAnalyticsPage />} />
+                <Route path="analytics"    element={<Navigate to="/super-admin/dashboard" replace />} />
                 <Route path="settings"     element={<SuperAdminSettingsPage />} />
               </Route>
 

@@ -51,17 +51,8 @@ const storage = multer.diskStorage({
   },
 })
 
-// Separate storage for media: prefixes filename with 'video-' or 'audio-'
-// so the saved URL encodes the type for correct player selection later.
-const mediaStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-  filename: (_req, file, cb) => {
-    const ext    = path.extname(file.originalname).toLowerCase() || '.webm'
-    const base   = file.mimetype.split(';')[0].trim()
-    const prefix = base.startsWith('video/') ? 'video' : 'audio'
-    cb(null, `${prefix}-${crypto.randomUUID()}${ext}`)
-  },
-})
+// Memory storage for media — file buffer stored directly in MySQL LONGBLOB
+const mediaStorage = multer.memoryStorage()
 
 const photoUpload = multer({
   storage,
@@ -88,16 +79,16 @@ const resumeUpload = multer({
 
 const mediaUpload = multer({
   storage: mediaStorage,
-  limits: { fileSize: 25 * 1024 * 1024 },  // 25 MB
+  limits: { fileSize: 50 * 1024 * 1024 },  // 50 MB
   fileFilter: (_req, file, cb) => {
-    // Strip codec params (e.g. 'audio/webm;codecs=opus' → 'audio/webm') before matching
-    const base = file.mimetype.split(';')[0].trim()
-    const allowed = [
-      'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/mp4', 'audio/m4a',
-      'audio/webm', 'audio/ogg', 'video/mp4', 'video/webm', 'video/quicktime',
-    ]
-    if (allowed.includes(base)) cb(null, true)
-    else cb(new Error('Only MP3, WAV, M4A, MP4 or WEBM files are allowed'))
+    // Strip codec params (e.g. 'video/webm;codecs=vp8,opus' → 'video/webm')
+    const base = (file.mimetype ?? '').split(';')[0].trim().toLowerCase()
+    // Accept any audio or video type, plus octet-stream (browser fallback for blobs)
+    if (base.startsWith('audio/') || base.startsWith('video/') || base === 'application/octet-stream') {
+      cb(null, true)
+    } else {
+      cb(new Error('Only audio and video files are allowed'))
+    }
   },
 })
 
@@ -129,16 +120,257 @@ async function callClaude(prompt: string): Promise<string> {
 
 // ── Regex-based resume parser (fallback when AI key is absent) ─
 function parseResumeWithRegex(text: string): Record<string, unknown> {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
   const emailMatch    = text.match(/[\w.+%-]+@[\w.-]+\.[a-zA-Z]{2,6}/)
   const mobileMatch   = text.match(/(?:\+91[\s-]?)?[6-9]\d{9}/)
   const linkedinMatch = text.match(/linkedin\.com\/in\/([\w%-]+)/i)
   const githubMatch   = text.match(/github\.com\/([\w-]+)/i)
+  const portfolioMatch = text.match(/(?:https?:\/\/)?(?:www\.)?([\w-]+\.(?:com|in|io|dev|app|me|net|org)(?:\/[\w-]*)?)/i)
+
+  // ── Name extraction ───────────────────────────────────────
+  // Heuristic: first 1-3 lines that are 2-5 words, all capitalized, not a header
+  let fullName: string | null = null
+  const sectionHeaders = /^(summary|profile|objective|education|experience|skills|certifications|languages|projects|achievements|contact|references|about|work|technical|professional)/i
+  for (const line of lines.slice(0, 8)) {
+    const cleaned = line.replace(/[^a-zA-Z\s.-]/g, '').trim()
+    const words = cleaned.split(/\s+/).filter(Boolean)
+    if (words.length >= 2 && words.length <= 5) {
+      // Check if all words start with uppercase or are common name parts
+      const allNamed = words.every(w => /^[A-Z]/.test(w) || /^(?:de|da|do|van|von|mc|mac|o')/i.test(w))
+      const hasNumber = /\d/.test(cleaned)
+      if (allNamed && !hasNumber && !sectionHeaders.test(cleaned)) {
+        fullName = cleaned
+        break
+      }
+    }
+  }
+  // Fallback: look for "Name:" pattern
+  if (!fullName) {
+    const nameLabel = text.match(/(?:name\s*[:.]?\s*)([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,4})/i)
+    if (nameLabel) fullName = nameLabel[1].trim()
+  }
+
+  // ── Known skills dictionary ───────────────────────────────
+  const knownSkills = [
+    'javascript', 'typescript', 'python', 'java', 'c#', 'c++', 'c', 'ruby', 'php', 'go', 'golang',
+    'rust', 'swift', 'kotlin', 'scala', 'perl', 'r', 'matlab', 'dart', 'elixir', 'clojure',
+    'react', 'react.js', 'reactjs', 'angular', 'angularjs', 'vue', 'vue.js', 'vuejs', 'svelte',
+    'next.js', 'nextjs', 'nuxt.js', 'nuxtjs', 'node.js', 'nodejs', 'express', 'express.js',
+    'django', 'flask', 'fastapi', 'spring', 'spring boot', 'asp.net', 'rails', 'laravel',
+    'html', 'html5', 'css', 'css3', 'sass', 'scss', 'less', 'tailwind', 'bootstrap', 'material-ui',
+    'jquery', 'redux', 'graphql', 'rest api', 'restful', 'webpack', 'vite', 'babel', 'gulp',
+    'docker', 'kubernetes', 'k8s', 'aws', 'amazon web services', 'azure', 'gcp', 'google cloud',
+    'terraform', 'ansible', 'jenkins', 'ci/cd', 'git', 'github', 'gitlab', 'bitbucket',
+    'linux', 'unix', 'bash', 'powershell', 'nginx', 'apache', 'redis', 'mongodb',
+    'postgresql', 'postgres', 'mysql', 'sql', 'sqlite', 'mariadb', 'oracle', 'sql server',
+    'nosql', 'firebase', 'supabase', 'elasticsearch', 'kafka', 'rabbitmq', 'websocket',
+    'machine learning', 'deep learning', 'ai', 'artificial intelligence', 'nlp', 'computer vision',
+    'tensorflow', 'pytorch', 'keras', 'scikit-learn', 'pandas', 'numpy', 'data science',
+    'agile', 'scrum', 'jira', 'confluence', 'figma', 'sketch', 'adobe xd', 'photoshop',
+    'illustrator', 'ui/ux', 'user interface', 'user experience', 'responsive design',
+    'unit testing', 'jest', 'mocha', 'chai', 'cypress', 'playwright', 'selenium',
+    'excel', 'powerpoint', 'word', 'outlook', 'microsoft office', 'google sheets',
+    'tableau', 'power bi', 'looker', 'snowflake', 'bigquery', 'hadoop', 'spark',
+    'blockchain', 'solidity', 'web3', 'smart contracts', 'ethereum',
+    'communication', 'leadership', 'teamwork', 'problem solving', 'analytical',
+    'project management', 'time management', 'critical thinking', 'creativity',
+  ]
+
+  const textLower = text.toLowerCase()
+  const foundSkills: { skill_name: string; skill_level: string }[] = []
+  const matched = new Set<string>()
+  for (const skill of knownSkills) {
+    if (matched.has(skill)) continue
+    const escaped = skill.replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+    const regex = new RegExp(`\\b${escaped}\\b`, 'i')
+    if (regex.test(textLower)) {
+      const skillName = skill.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+      const level = textLower.includes(`expert`) && textLower.includes(skill) ? 'expert'
+                  : textLower.includes(`advanced`) && textLower.includes(skill) ? 'advanced'
+                  : 'intermediate'
+      foundSkills.push({ skill_name: skillName, skill_level: level })
+      matched.add(skill)
+    }
+  }
+  // Deduplicate by normalised name
+  const deduped: { skill_name: string; skill_level: string }[] = []
+  const seen = new Set<string>()
+  for (const s of foundSkills) {
+    const key = s.skill_name.toLowerCase().replace(/[^a-z0-9]/g, '')
+    if (!seen.has(key)) { seen.add(key); deduped.push(s) }
+  }
+
+  // ── Education extraction ──────────────────────────────────
+  const degrees = [
+    { qual: 'PhD',       pattern: /(ph\.?\s*d\.?|phd|doctorate)/i },
+    { qual: 'Master',    pattern: /(m\.?\s*tech\.?|m\.?\s*s\.?|mba|master\s*(?:of|in)?|msc|m\.?\s*sc\.?)/i },
+    { qual: 'Bachelor',  pattern: /(b\.?\s*tech\.?|b\.?\s*e\.?|bachelor\s*(?:of|in)?|b\.?\s*sc\.?|b\.?\s*a\.?|bca|bba)/i },
+    { qual: 'Diploma',   pattern: /(diploma|pgd|post\s*graduate\s*dip)/i },
+    { qual: '12th',      pattern: /(12th|xii|hsc|higher\s*secondary|intermediate)/i },
+    { qual: '10th',      pattern: /(10th|x|ssc|matriculation)/i },
+  ]
+  const education: any[] = []
+  const seenEdu = new Set<string>()
+  for (const line of lines) {
+    for (const { qual, pattern } of degrees) {
+      const m = line.match(pattern)
+      if (m) {
+        const key = qual + line.slice(0, 40).toLowerCase()
+        if (seenEdu.has(key)) continue
+        seenEdu.add(key)
+        const yearMatch = line.match(/\b(19\d{2}|20\d{2})\b/)
+        const pctMatch  = line.match(/(\d{1,2}(?:\.\d)?)\s*%/)
+        const cgpaMatch = line.match(/(\d\.\d)\s*cgpa/i)
+        education.push({
+          qualification: qual,
+          degree:        m[0].replace(/\./g, '').trim().toUpperCase(),
+          specialization: null,
+          institute:     line.replace(/\d{4}/g, '').replace(/\d{1,2}\s*%/g, '').replace(/cgpa[\s\d.]+/i, '').replace(pattern, '').replace(/[,;:|()]/g, '').trim() || null,
+          university:    null,
+          passing_year:  yearMatch ? parseInt(yearMatch[1]) : null,
+          percentage:    pctMatch ? parseFloat(pctMatch[1]) : null,
+        })
+        break
+      }
+    }
+  }
+
+  // ── Experience extraction ─────────────────────────────────
+  const experience: any[] = []
+  // Look for date ranges like "Jan 2020 - Present" or "2020-2023" or "2020 - 2023"
+  const dateRangeRegex = /(\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s*\d{4}|\b\d{4})\s*[–\-to]+\s*(\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s*\d{4}|present|current|\b\d{4})/gi
+  const jobTitleKeywords = /(?:engineer|developer|designer|manager|analyst|consultant|lead|architect|administrator|specialist|associate|coordinator|director|head|supervisor|officer|trainee|intern)\b/i
+  let dateMatch: RegExpExecArray | null
+  while ((dateMatch = dateRangeRegex.exec(text)) !== null) {
+    const startRaw = dateMatch[1].trim()
+    const endRaw   = dateMatch[2].trim().toLowerCase()
+    const isCurrent = endRaw === 'present' || endRaw === 'current'
+    const contextStart = Math.max(0, dateMatch.index - 120)
+    const contextEnd   = Math.min(text.length, dateMatch.index + dateMatch[0].length + 80)
+    const context = text.slice(contextStart, contextEnd)
+    const linesBefore = context.split('\n').filter(Boolean)
+    let company = ''
+    let title = ''
+    for (const cl of linesBefore) {
+      if (!title && jobTitleKeywords.test(cl)) {
+        title = cl.replace(/[–\-to]+\s*(?:present|current|\d{4})/gi, '').trim().slice(0, 100)
+      }
+      // Company often on a line before the title or on the same line
+      if (cl.length > 2 && cl.length < 100 && /^[A-Z]/.test(cl.trim()) && !jobTitleKeywords.test(cl) && cl !== startRaw) {
+        company = cl.trim()
+      }
+    }
+    // Only add if we found a title or company
+    if (title || company) {
+      const joiningDate = normalizeDate(startRaw)
+      const relievingDate = isCurrent ? null : normalizeDate(endRaw === 'present' ? '' : dateMatch[2])
+      // Check if we already captured this experience
+      const exists = experience.some(e => e.company_name === company && e.joining_date === joiningDate)
+      if (!exists) {
+        experience.push({
+          company_name:          company || 'Unknown',
+          designation:           title || 'Unknown',
+          joining_date:          joiningDate || '2020-01-01',
+          relieving_date:        relievingDate,
+          is_current:            isCurrent ? 1 : 0,
+          roles_responsibilities: context.replace(dateRangeRegex, '').trim().slice(0, 300) || null,
+        })
+      }
+    }
+  }
+
+  // ── Certifications extraction ─────────────────────────────
+  const certKeywords = /(certification|certified|certificate|coursera|udemy|aws certified|google certified|microsoft certified|oracle certified|pmp|itil|scrum|six sigma|ccna|ceh|cissp|comptia)/i
+  const certifications: any[] = []
+  for (const line of lines) {
+    if (certKeywords.test(line) && line.length < 200) {
+      const yearMatch = line.match(/\b(19\d{2}|20\d{2})\b/)
+      certifications.push({
+        certification_name:    line.replace(/\d{4}/g, '').replace(/[,;]/g, '').trim().slice(0, 150),
+        issuing_organization:  null,
+        issue_date:            yearMatch ? `${yearMatch[1]}-01-01` : null,
+      })
+    }
+  }
+
+  // ── Languages extraction ──────────────────────────────────
+  const knownLanguages = ['english', 'hindi', 'spanish', 'french', 'german', 'mandarin', 'japanese',
+    'korean', 'portuguese', 'italian', 'dutch', 'russian', 'arabic', 'bengali', 'tamil', 'telugu',
+    'marathi', 'gujarati', 'kannada', 'malayalam', 'punjabi', 'urdu', 'odia', 'assamese']
+  const languages: any[] = []
+  for (const lang of knownLanguages) {
+    const langRegex = new RegExp(`\\b${lang}\\b`, 'i')
+    if (langRegex.test(textLower)) {
+      const prof = textLower.includes('native') && textLower.includes(lang) ? 'native'
+                 : textLower.includes('fluent') && textLower.includes(lang) ? 'fluent'
+                 : textLower.includes('proficient') && textLower.includes(lang) ? 'proficient'
+                 : 'conversational'
+      const exists = languages.some(l => l.language.toLowerCase() === lang)
+      if (!exists) languages.push({ language: lang.charAt(0).toUpperCase() + lang.slice(1), proficiency: prof })
+    }
+  }
+
+  // ── Location extraction (crude) ───────────────────────────
+  const locationMatch = text.match(/(?:location|address|city|based\s*(?:in|at))\s*[:.]?\s*([A-Za-z\s,]+)/i)
+  const currentLocation = locationMatch?.[1]?.trim() ?? null
+
+  // ── Current company / designation ─────────────────────────
+  let currentCompany = null
+  let currentDesignation = null
+  for (const exp of experience) {
+    if (exp.is_current) {
+      currentCompany = exp.company_name
+      currentDesignation = exp.designation
+      break
+    }
+  }
+  if (!currentCompany) {
+    const workMatch = text.match(/(?:currently|presently)\s+working\s+(?:as\s+a\s+)?(?:at|in|with)\s+([A-Z][A-Za-z\s&.]+)/i)
+    if (workMatch) currentCompany = workMatch[1].trim()
+    const desigMatch = text.match(/(?:currently|presently)\s+(?:working\s+as\s+)?(?:a\s+|an\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/i)
+    if (desigMatch) currentDesignation = desigMatch[1].trim()
+  }
+
+  // ── Highest education ─────────────────────────────────────
+  const highestEducation = education.length > 0
+    ? (education.find((e: any) => e.qualification === 'PhD')
+    || education.find((e: any) => e.qualification === 'Master')
+    || education.find((e: any) => e.qualification === 'Bachelor')
+    || education.find((e: any) => e.qualification === 'Diploma')
+    || education[0])?.degree ?? null
+    : null
+
+  // ── Total experience years ────────────────────────────────
+  let totalExpYears: number | null = null
+  const expYearMatch = text.match(/(\d+)\+?\s*(?:years?|yrs?)(?:\s+of)?\s*(?:experience|exp)/i)
+  if (expYearMatch) totalExpYears = parseInt(expYearMatch[1])
+
+  function normalizeDate(raw: string): string | null {
+    if (!raw || raw.toLowerCase() === 'present' || raw.toLowerCase() === 'current') return null
+    const d = raw.match(/\b(\d{4})\b/)
+    if (d) return `${d[1]}-01-01`
+    return null
+  }
+
   return {
-    full_name: null, email: emailMatch?.[0] ?? null,
+    full_name: fullName,
+    email: emailMatch?.[0] ?? null,
     mobile: mobileMatch?.[0]?.replace(/\D/g, '').slice(-10) ?? null,
     linkedin_url: linkedinMatch ? `https://www.linkedin.com/in/${linkedinMatch[1]}` : null,
     github_url:   githubMatch   ? `https://github.com/${githubMatch[1]}`            : null,
-    skills: [], education: [], experience: [], certifications: [],
+    portfolio_url: portfolioMatch ? portfolioMatch[0] : null,
+    current_company: currentCompany,
+    current_designation: currentDesignation,
+    total_experience_years: totalExpYears,
+    current_location: currentLocation,
+    highest_education: highestEducation,
+    professional_summary: null,
+    career_objective: null,
+    skills: deduped,
+    education,
+    experience,
+    certifications,
+    languages,
   }
 }
 
@@ -212,6 +444,12 @@ uploadRouter.post('/resume', requireCandidate, resumeUpload.single('resume'), as
     let resumeText = ''
     if (req.file.mimetype === 'application/pdf') {
       resumeText = await extractPdfText(req.file.path)
+    } else if (req.file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      try {
+        const mammoth = await import('mammoth')
+        const result = await (mammoth as any).extractRawText({ path: req.file.path })
+        resumeText = ((result as any).value ?? '').slice(0, 8000)
+      } catch {}
     }
 
     await db.execute(
@@ -261,6 +499,10 @@ Return ONLY a valid JSON object with these exact keys (use null for missing fiel
   "last_name": "string or null",
   "email": "string or null",
   "mobile": "string or null",
+  "alternate_email": "string or null",
+  "gender": "string or null",
+  "date_of_birth": "YYYY-MM-DD or null",
+  "nationality": "string or null",
   "linkedin_url": "string or null",
   "github_url": "string or null",
   "portfolio_url": "string or null",
@@ -268,12 +510,17 @@ Return ONLY a valid JSON object with these exact keys (use null for missing fiel
   "current_designation": "string or null",
   "total_experience_years": "number or null",
   "current_location": "string or null",
+  "current_city": "string or null",
+  "current_state": "string or null",
+  "current_country": "string or null",
   "professional_summary": "string (max 500 chars) or null",
   "career_objective": "string (max 500 chars) or null",
+  "highest_education": "string or null",
   "skills": [{"skill_name": "string", "skill_level": "beginner|intermediate|advanced|expert"}],
   "education": [{"qualification": "string", "degree": "string", "specialization": "string or null", "institute": "string", "university": "string or null", "passing_year": "number or null", "percentage": "number or null"}],
   "experience": [{"company_name": "string", "designation": "string", "joining_date": "YYYY-MM-DD", "relieving_date": "YYYY-MM-DD or null", "is_current": 0 or 1, "roles_responsibilities": "string or null"}],
-  "certifications": [{"certification_name": "string", "issuing_organization": "string", "issue_date": "YYYY-MM-DD or null"}]
+  "certifications": [{"certification_name": "string", "issuing_organization": "string", "issue_date": "YYYY-MM-DD or null"}],
+  "languages": [{"language": "string", "proficiency": "basic|conversational|fluent|native"}]
 }
 
 Resume Text:
@@ -325,13 +572,14 @@ const directParseUpload = multer({
 
 async function extractTextFromBuffer(buffer: Buffer, mimetype: string): Promise<string> {
   if (mimetype === 'application/pdf') {
+    let parser: any
     try {
-      // pdf-parse v2 default export
-      const mod = await import('pdf-parse')
-      const pdfParse = (mod as any).default ?? mod
-      const data = await pdfParse(buffer)
-      return ((data as any).text ?? '').slice(0, 8000)
+      const { PDFParse } = await import('pdf-parse') as any
+      parser = new PDFParse({ data: buffer })
+      const result = await parser.getText()
+      return (result.text ?? '').slice(0, 8000)
     } catch { return '' }
+    finally { await parser?.destroy?.() }
   }
   // DOCX
   try {
@@ -458,34 +706,63 @@ uploadRouter.post('/company-media', requireAdmin, photoUpload.single('photo'), a
 })
 
 // ════════════════════════════════════════════════════════════
-// POST /api/v1/upload/media  — voice / video intro
+// POST /api/v1/upload/media  — voice / video intro (stored as LONGBLOB in DB)
 // ════════════════════════════════════════════════════════════
 uploadRouter.post('/media', requireCandidate, mediaUpload.single('media'), async (req: any, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' })
 
-    const url      = fileUrl(req.file.filename)
-    const isVideo  = req.file.mimetype.startsWith('video/')
+    const mime     = (req.file.mimetype ?? '').split(';')[0].trim().toLowerCase()
+    const ext      = path.extname(req.file.originalname).toLowerCase() || '.webm'
+    const VIDEO_EXTS = new Set(['.mp4', '.webm', '.mov', '.avi', '.mkv', '.ogg'])
+    const isVideo  = mime.startsWith('video/') || (mime === 'application/octet-stream' && VIDEO_EXTS.has(ext))
     const duration = req.body.duration ? parseInt(req.body.duration) : null
+    const candidateId = req.candidate.sub
+
+    // Build a serve URL that encodes type via prefix (keeps frontend player detection working)
+    const serveUrl = `/api/v1/upload/intro/${isVideo ? 'video' : 'audio'}-${candidateId}`
 
     await db.execute(
-      'UPDATE bmi_candidate SET voice_intro_url = ?, voice_intro_duration = ? WHERE id = ?',
-      [url, duration, req.candidate.sub]
+      'UPDATE bmi_candidate SET voice_intro_url = ?, voice_intro_duration = ?, voice_intro_data = ?, voice_intro_mime = ? WHERE id = ?',
+      [serveUrl, duration, req.file.buffer, mime || (isVideo ? 'video/webm' : 'audio/webm'), candidateId]
     )
-
-    try {
-      await db.execute(
-        `INSERT INTO bmi_candidate_document
-           (id, tenant_id, candidate_id, document_type, file_name, file_url, file_size_kb, mime_type, uploaded_by)
-         VALUES (UUID(), ?, ?, 'other', ?, ?, ?, ?, 'candidate')`,
-        [req.candidate.tenant_id, req.candidate.sub, req.file.originalname, url, Math.round(req.file.size / 1024), req.file.mimetype]
-      )
-    } catch {}
 
     res.json({
       success: true,
       message: `${isVideo ? 'Video' : 'Voice'} introduction uploaded successfully`,
-      data: { url, type: isVideo ? 'video' : 'audio', duration },
+      data: { url: serveUrl, type: isVideo ? 'video' : 'audio', duration },
     })
+  } catch (err) { next(err) }
+})
+
+// GET /api/v1/upload/intro/:id  — serve voice/video intro from DB (public, UUID-protected)
+// id format: "video-<candidateId>" or "audio-<candidateId>"
+uploadRouter.get('/intro/:id', async (req: any, res, next) => {
+  try {
+    const { id } = req.params
+    const candidateId = id.replace(/^(video|audio)-/, '')
+    if (!candidateId || candidateId === id) {
+      return res.status(400).json({ success: false, message: 'Invalid media ID' })
+    }
+
+    const [rows] = await db.execute<RowDataPacket[]>(
+      'SELECT voice_intro_data, voice_intro_mime FROM bmi_candidate WHERE id = ?',
+      [candidateId]
+    )
+    const row = rows[0]
+    if (!row || !row.voice_intro_data) {
+      return res.status(404).json({ success: false, message: 'Media not found' })
+    }
+
+    const mime = row.voice_intro_mime || (id.startsWith('video-') ? 'video/webm' : 'audio/webm')
+    const buf: Buffer = Buffer.isBuffer(row.voice_intro_data)
+      ? row.voice_intro_data
+      : Buffer.from(row.voice_intro_data)
+
+    res.set('Content-Type', mime)
+    res.set('Content-Length', String(buf.length))
+    res.set('Accept-Ranges', 'bytes')
+    res.set('Cache-Control', 'private, max-age=86400')
+    res.send(buf)
   } catch (err) { next(err) }
 })

@@ -38,6 +38,29 @@ function getInitials(name: string) {
   return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
 }
 
+function IntroTranscriptBlock({ transcript, feedback, score }: { transcript: string; feedback?: string; score?: number | null }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 overflow-hidden">
+      <button onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-2.5 bg-zinc-50 dark:bg-zinc-800 text-left hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors">
+        <span className="text-[12px] font-semibold text-zinc-700 dark:text-zinc-300">Intro Transcript</span>
+        <span className="text-[11px] text-zinc-400">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="px-4 py-3 space-y-2.5">
+          <p className="text-[12.5px] text-zinc-700 dark:text-zinc-300 italic leading-relaxed">"{transcript}"</p>
+          {feedback && (
+            <div className={`rounded-lg px-3 py-2 text-[12px] text-zinc-700 ${(score ?? 0) >= 80 ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-amber-50 dark:bg-amber-900/20'}`}>
+              <span className="font-semibold">AI Feedback: </span>{feedback}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function SuperAdminCandidatesPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [total, setTotal]           = useState(0)
@@ -296,21 +319,47 @@ export default function SuperAdminCandidatesPage() {
                 </a>
               )}
 
-              {/* Voice / Video intro */}
-              {safeUrl(detail.voice_intro_url) && (
+              {/* Gate scores */}
+              {(detail.profile_completion != null || detail.intro_score != null) && (
                 <div>
-                  <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                    <Video className="h-3.5 w-3.5" /> Intro Recording
+                  <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wide mb-2">Interview Gates</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { label: 'Profile', value: detail.profile_completion != null ? `${detail.profile_completion}%` : '—', pass: (detail.profile_completion ?? 0) >= 95, sub: '≥95%' },
+                      { label: 'Assessment', value: detail.assessment_score != null ? `${detail.assessment_score}%` : '—', pass: (detail.assessment_score ?? 0) >= 80, sub: '≥80%' },
+                      { label: 'Intro', value: detail.intro_score != null ? `${detail.intro_score}/100` : '—', pass: (detail.intro_score ?? 0) >= 80, sub: '≥80' },
+                    ].map(g => (
+                      <div key={g.label} className="rounded-xl p-2.5 text-center"
+                        style={{ background: g.pass ? '#f0fdf4' : '#f8fafc', border: `1px solid ${g.pass ? '#bbf7d0' : '#e8edf8'}` }}>
+                        <p className={`text-[14px] font-black ${g.pass ? 'text-emerald-600' : 'text-zinc-500'}`}>{g.value}</p>
+                        <p className="text-[10px] font-semibold text-zinc-500 mt-0.5">{g.label}</p>
+                        <p className="text-[9.5px] text-zinc-400">{g.sub}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Voice / Video intro */}
+              {detail.voice_intro_url && (
+                <div className="bg-zinc-50 dark:bg-zinc-800/50 rounded-xl p-3">
+                  <p className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                    <Video className="h-3.5 w-3.5" /> Introduction Recording
                   </p>
-                  {/\.(mp4|webm|ogg|mov)(\?|$)/i.test(detail.voice_intro_url) ? (
-                    <video controls src={safeUrl(detail.voice_intro_url)} className="w-full rounded-xl max-h-56 bg-black" />
+                  {/video-/.test(detail.voice_intro_url) || /\.(mp4|webm|ogg|mov)(\?|$)/i.test(detail.voice_intro_url) ? (
+                    <video controls src={detail.voice_intro_url} className="w-full rounded-xl max-h-56 bg-black" />
                   ) : (
-                    <audio controls src={safeUrl(detail.voice_intro_url)} className="w-full" />
+                    <audio controls src={detail.voice_intro_url} className="w-full" />
                   )}
                   {detail.voice_intro_duration && (
-                    <p className="text-[11px] text-zinc-400 mt-1">{Math.round(detail.voice_intro_duration)}s</p>
+                    <p className="text-[11px] text-zinc-400 mt-1">{Math.round(detail.voice_intro_duration)}s recording</p>
                   )}
                 </div>
+              )}
+
+              {/* Intro transcript + AI feedback */}
+              {detail.intro_transcript && (
+                <IntroTranscriptBlock transcript={detail.intro_transcript} feedback={detail.intro_feedback} score={detail.intro_score} />
               )}
 
               {/* Skills */}

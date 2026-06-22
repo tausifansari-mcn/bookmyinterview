@@ -17,7 +17,10 @@ import { assessmentsRouter } from './modules/assessments/assessments.routes.js'
 import { applicationsRouter } from './modules/applications/applications.routes.js'
 import { interviewsRouter } from './modules/interviews/interviews.routes.js'
 import { offersRouter }    from './modules/offers/offers.routes.js'
-import { analyticsRouter } from './modules/analytics/analytics.routes.js'
+import { analyticsRouter }    from './modules/analytics/analytics.routes.js'
+import { superAdminRouter }   from './modules/super-admin/super-admin.routes.js'
+import { clientPortalRouter } from './modules/client-portal/client-portal.routes.js'
+import { questionBankRouter } from './modules/question-bank/question-bank.routes.js'
 
 export const app = express()
 
@@ -35,9 +38,11 @@ app.use(cors({
 }))
 
 // Rate limiting
-app.use('/api/', rateLimit({ windowMs: 15 * 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false }))
-app.use('/api/v1/auth/login', rateLimit({ windowMs: 15 * 60 * 1000, max: 10 }))
-app.use('/api/v1/auth/forgot-password', rateLimit({ windowMs: 15 * 60 * 1000, max: 5 }))
+app.use('/api/', rateLimit({ windowMs: 15 * 60 * 1000, max: 500, standardHeaders: true, legacyHeaders: false }))
+app.use('/api/v1/auth/login',            rateLimit({ windowMs: 15 * 60 * 1000, max: 30 }))
+app.use('/api/v1/auth/forgot-password',  rateLimit({ windowMs: 15 * 60 * 1000, max: 10 }))
+app.use('/api/v1/client/login',          rateLimit({ windowMs: 15 * 60 * 1000, max: 30 }))
+app.use('/api/v1/super-admin/login',     rateLimit({ windowMs: 15 * 60 * 1000, max: 20 }))
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')))
@@ -67,6 +72,9 @@ v1.use('/users',        usersRouter)
   v1.use('/interviews',   interviewsRouter)
   v1.use('/offers',       offersRouter)
   v1.use('/analytics',    analyticsRouter)
+  v1.use('/client',       clientPortalRouter)
+  v1.use('/question-bank', questionBankRouter)
+  v1.use('/super-admin',  superAdminRouter)
 app.use('/api/v1', v1)
 
 // 404

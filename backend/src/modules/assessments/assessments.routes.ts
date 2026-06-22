@@ -1,471 +1,275 @@
 import { Router } from 'express'
-import crypto from 'crypto'
-import { z } from 'zod'
 import type { RowDataPacket } from 'mysql2'
 import { db } from '../../db/mysql.js'
-import { requireAuth, requireRole, type AuthRequest } from '../../middleware/auth.js'
-import { sendAssessmentInviteEmail } from '../../services/email.service.js'
-import { env } from '../../config/env.js'
 
 export const assessmentsRouter = Router()
 
-// ── Question Bank CRUD ─────────────────────────────────────────
-
-assessmentsRouter.get('/bank', requireAuth, async (req: AuthRequest, res, next) => {
-  try {
-    const { category, type, difficulty, page = '1', limit = '20' } = req.query as any
-    let where = 'tenant_id = ? AND is_active = 1'
-    const params: any[] = [req.user!.tenant_id]
-
-    if (category)   { where += ' AND category = ?';        params.push(category) }
-    if (type)       { where += ' AND question_type = ?';   params.push(type) }
-    if (difficulty) { where += ' AND difficulty = ?';      params.push(difficulty) }
-
-    const pg  = Math.max(1, parseInt(page) || 1)
-    const lim = Math.min(100, Math.max(1, parseInt(limit) || 20))
-    const off = (pg - 1) * lim
-
-    const [rows] = await db.execute<RowDataPacket[]>(
-      `SELECT * FROM bmi_aq_bank WHERE ${where} ORDER BY category, created_at DESC LIMIT ${lim} OFFSET ${off}`,
-      params
-    )
-    const [[ct]] = await db.execute<RowDataPacket[]>(
-      `SELECT COUNT(*) AS total FROM bmi_aq_bank WHERE ${where}`, params
-    )
-    res.json({ success: true, data: { questions: rows, total: (ct as any).total, page: pg, limit: lim } })
-  } catch (err) { next(err) }
-})
-
-assessmentsRouter.get('/bank/categories', requireAuth, async (req: AuthRequest, res, next) => {
-  try {
-    const [rows] = await db.execute<RowDataPacket[]>(
-      `SELECT DISTINCT category, COUNT(*) AS count
-       FROM bmi_aq_bank WHERE tenant_id = ? AND is_active = 1
-       GROUP BY category ORDER BY category`,
-      [req.user!.tenant_id]
-    )
-    res.json({ success: true, data: rows })
-  } catch (err) { next(err) }
-})
-
-const bankSchema = z.object({
-  title:           z.string().min(5),
-  question_type:   z.enum(['single_choice','multi_choice','true_false','short_text','paragraph','scenario','technical','aptitude']),
-  category:        z.string().min(1).max(100).optional(),
-  difficulty:      z.enum(['easy','medium','hard']).default('medium'),
-  options:         z.array(z.string()).optional(),
-  correct_options: z.array(z.string()).optional(),
-  explanation:     z.string().optional(),
-  marks:           z.coerce.number().int().min(1).default(1),
-  negative_marks:  z.coerce.number().min(0).default(0),
-  tags:            z.array(z.string()).optional(),
-})
-
-assessmentsRouter.post('/bank', requireAuth, requireRole('admin','super_admin','hr_manager'), async (req: AuthRequest, res, next) => {
-  try {
-    const body = bankSchema.parse(req.body)
-    const id = crypto.randomUUID()
-    await db.execute(
-      `INSERT INTO bmi_aq_bank
-        (id, tenant_id, title, question_type, category, difficulty, options, correct_options,
-         explanation, marks, negative_marks, tags, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, req.user!.tenant_id, body.title, body.question_type,
-       body.category ?? null, body.difficulty,
-       body.options       ? JSON.stringify(body.options)         : null,
-       body.correct_options ? JSON.stringify(body.correct_options) : null,
-       body.explanation ?? null, body.marks, body.negative_marks,
-       body.tags ? JSON.stringify(body.tags) : null, req.user!.id]
-    )
-    res.status(201).json({ success: true, message: 'Question created', data: { id } })
-  } catch (err) { next(err) }
-})
-
-assessmentsRouter.put('/bank/:id', requireAuth, requireRole('admin','super_admin','hr_manager'), async (req: AuthRequest, res, next) => {
-  try {
-    const body = bankSchema.parse(req.body)
-    await db.execute(
-      `UPDATE bmi_aq_bank SET title=?, question_type=?, category=?, difficulty=?,
-       options=?, correct_options=?, explanation=?, marks=?, negative_marks=?, tags=?, updated_at=NOW()
-       WHERE id = ? AND tenant_id = ?`,
-      [body.title, body.question_type, body.category ?? null, body.difficulty,
-       body.options ? JSON.stringify(body.options) : null,
-       body.correct_options ? JSON.stringify(body.correct_options) : null,
-       body.explanation ?? null, body.marks, body.negative_marks,
-       body.tags ? JSON.stringify(body.tags) : null, req.params.id, req.user!.tenant_id]
-    )
-    res.json({ success: true, message: 'Question updated' })
-  } catch (err) { next(err) }
-})
-
-assessmentsRouter.delete('/bank/:id', requireAuth, requireRole('admin','super_admin','hr_manager'), async (req: AuthRequest, res, next) => {
-  try {
-    await db.execute(
-      'UPDATE bmi_aq_bank SET is_active = 0 WHERE id = ? AND tenant_id = ?',
-      [req.params.id, req.user!.tenant_id]
-    )
-    res.json({ success: true, message: 'Question deleted' })
-  } catch (err) { next(err) }
-})
-
-// ── Assessment Config per Job ──────────────────────────────────
-
-assessmentsRouter.get('/job/:jobId', requireAuth, async (req: AuthRequest, res, next) => {
-  try {
-    const [[asmtRow]] = await db.execute<RowDataPacket[]>(
-      `SELECT a.*, GROUP_CONCAT(aq.aq_bank_id) AS linked_q_ids
-       FROM bmi_assessment a
-       LEFT JOIN bmi_assessment_question aq ON aq.assessment_id = a.id
-       WHERE a.job_id = ? AND a.tenant_id = ?
-       GROUP BY a.id`,
-      [req.params.jobId, req.user!.tenant_id]
-    )
-    if (!asmtRow) return res.json({ success: true, data: null })
-
-    const [questions] = await db.execute<RowDataPacket[]>(
-      `SELECT b.*, aq.order_no, aq.marks_override, aq.id AS aq_link_id
-       FROM bmi_assessment_question aq
-       JOIN bmi_aq_bank b ON b.id = aq.aq_bank_id
-       WHERE aq.assessment_id = ?
-       ORDER BY aq.order_no`,
-      [asmtRow.id]
-    )
-
-    res.json({ success: true, data: { ...asmtRow, questions } })
-  } catch (err) { next(err) }
-})
-
-const asmtSchema = z.object({
-  title:           z.string().min(2),
-  description:     z.string().optional(),
-  instructions:    z.string().optional(),
-  time_limit_mins: z.coerce.number().int().min(5).default(30),
-  passing_score:   z.coerce.number().min(0).max(100).default(60),
-  shuffle_qs:      z.coerce.number().min(0).max(1).default(0),
-  show_result:     z.coerce.number().min(0).max(1).default(1),
-  question_ids:    z.array(z.string()).optional(),
-})
-
-assessmentsRouter.post('/job/:jobId', requireAuth, requireRole('admin','super_admin','hr_manager'), async (req: AuthRequest, res, next) => {
-  try {
-    const body = asmtSchema.parse(req.body)
-    const tid = req.user!.tenant_id
-
-    // Check job exists
-    const [[job]] = await db.execute<RowDataPacket[]>(
-      'SELECT id FROM bmi_job WHERE id = ? AND tenant_id = ?', [req.params.jobId, tid]
-    )
-    if (!job) return res.status(404).json({ success: false, message: 'Job not found' })
-
-    // Delete existing assessment for this job (replace)
-    const [[existing]] = await db.execute<RowDataPacket[]>(
-      'SELECT id FROM bmi_assessment WHERE job_id = ? AND tenant_id = ?', [req.params.jobId, tid]
-    )
-    if (existing?.id) {
-      await db.execute('DELETE FROM bmi_assessment_question WHERE assessment_id = ?', [existing.id])
-      await db.execute('DELETE FROM bmi_assessment WHERE id = ?', [existing.id])
-    }
-
-    const asmtId = crypto.randomUUID()
-    let totalMarks = 0
-
-    if (body.question_ids && body.question_ids.length > 0) {
-      const [qRows] = await db.execute<RowDataPacket[]>(
-        `SELECT id, marks FROM bmi_aq_bank WHERE id IN (${body.question_ids.map(() => '?').join(',')}) AND tenant_id = ?`,
-        [...body.question_ids, tid]
-      )
-      totalMarks = qRows.reduce((s, q) => s + Number(q.marks ?? 1), 0)
-
-      await db.execute(
-        `INSERT INTO bmi_assessment (id, tenant_id, job_id, title, description, instructions,
-           time_limit_mins, passing_score, total_marks, shuffle_qs, show_result, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [asmtId, tid, req.params.jobId, body.title, body.description ?? null,
-         body.instructions ?? null, body.time_limit_mins, body.passing_score,
-         totalMarks, body.shuffle_qs, body.show_result, req.user!.id]
-      )
-
-      for (let i = 0; i < body.question_ids.length; i++) {
-        await db.execute(
-          'INSERT INTO bmi_assessment_question (id, assessment_id, aq_bank_id, order_no) VALUES (UUID(), ?, ?, ?)',
-          [asmtId, body.question_ids[i], i + 1]
-        )
-      }
-    } else {
-      await db.execute(
-        `INSERT INTO bmi_assessment (id, tenant_id, job_id, title, description, instructions,
-           time_limit_mins, passing_score, total_marks, shuffle_qs, show_result, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [asmtId, tid, req.params.jobId, body.title, body.description ?? null,
-         body.instructions ?? null, body.time_limit_mins, body.passing_score,
-         0, body.shuffle_qs, body.show_result, req.user!.id]
-      )
-    }
-
-    res.status(201).json({ success: true, message: 'Assessment configured', data: { id: asmtId } })
-  } catch (err) { next(err) }
-})
-
-assessmentsRouter.delete('/job/:jobId', requireAuth, requireRole('admin','super_admin','hr_manager'), async (req: AuthRequest, res, next) => {
-  try {
-    const [[a]] = await db.execute<RowDataPacket[]>(
-      'SELECT id FROM bmi_assessment WHERE job_id = ? AND tenant_id = ?',
-      [req.params.jobId, req.user!.tenant_id]
-    )
-    if (a?.id) {
-      await db.execute('DELETE FROM bmi_assessment_question WHERE assessment_id = ?', [a.id])
-      await db.execute('DELETE FROM bmi_assessment WHERE id = ?', [a.id])
-    }
-    res.json({ success: true, message: 'Assessment removed' })
-  } catch (err) { next(err) }
-})
-
-// ── Invite Candidate for Assessment ───────────────────────────
-
-assessmentsRouter.post('/invite/:applicationId', requireAuth, requireRole('admin','super_admin','hr_manager','recruiter'), async (req: AuthRequest, res, next) => {
-  try {
-    const tid = req.user!.tenant_id
-
-    const [[app]] = await db.execute<RowDataPacket[]>(
-      `SELECT a.*, c.full_name, c.email, j.title AS job_title
-       FROM bmi_application a
-       JOIN bmi_candidate c ON c.id = a.candidate_id
-       JOIN bmi_job j ON j.id = a.job_id
-       WHERE a.id = ? AND a.tenant_id = ?`,
-      [req.params.applicationId, tid]
-    )
-    if (!app) return res.status(404).json({ success: false, message: 'Application not found' })
-
-    const [[asmt]] = await db.execute<RowDataPacket[]>(
-      'SELECT id FROM bmi_assessment WHERE job_id = ? AND is_active = 1', [app.job_id]
-    )
-    if (!asmt) return res.status(400).json({ success: false, message: 'No active assessment configured for this job' })
-
-    // Check if already invited
-    const [[existing]] = await db.execute<RowDataPacket[]>(
-      'SELECT id, status FROM bmi_candidate_assessment WHERE application_id = ?', [app.id]
-    )
-    if (existing && existing.status !== 'expired') {
-      return res.status(409).json({ success: false, message: `Assessment already ${existing.status}` })
-    }
-
-    const token = crypto.randomBytes(32).toString('hex')
-
-    if (existing?.id) {
-      await db.execute(
-        `UPDATE bmi_candidate_assessment SET invite_token=?, status='invited', invite_sent_at=NOW() WHERE id=?`,
-        [token, existing.id]
-      )
-    } else {
-      await db.execute(
-        `INSERT INTO bmi_candidate_assessment
-          (id, tenant_id, assessment_id, application_id, candidate_id, status, invite_token, invite_sent_at)
-         VALUES (UUID(), ?, ?, ?, ?, 'invited', ?, NOW())`,
-        [tid, asmt.id, app.id, app.candidate_id, token]
-      )
-    }
-
-    // Update application stage
-    await db.execute(
-      `UPDATE bmi_application SET current_stage_name = 'Assessment Pending', updated_at = NOW()
-       WHERE id = ?`, [app.id]
-    )
-
-    // Send invite email
-    const portalUrl = env.FRONTEND_URL
-    sendAssessmentInviteEmail(app.email, app.full_name, app.job_title, `${portalUrl}/portal/assessment/${token}`).catch(() => {})
-
-    res.json({ success: true, message: `Assessment invitation sent to ${app.email}` })
-  } catch (err) { next(err) }
-})
-
-// ── Get Assessment for Candidate (by token) ───────────────────
-// Public endpoint — candidate uses invite token
-
+// GET /api/v1/assessments/attempt/:token
 assessmentsRouter.get('/attempt/:token', async (req, res, next) => {
   try {
-    const [[attempt]] = await db.execute<RowDataPacket[]>(
-      `SELECT ca.*, a.title, a.instructions, a.time_limit_mins, a.shuffle_qs, a.total_marks
+    const { token } = req.params
+    const [rows] = await db.execute<RowDataPacket[]>(
+      `SELECT ca.id, ca.status, ca.started_at, ca.total_marks, ca.assessment_id,
+              ass.title, ass.instructions, ass.time_limit_mins, ass.questions, ass.passing_score
        FROM bmi_candidate_assessment ca
-       JOIN bmi_assessment a ON a.id = ca.assessment_id
-       WHERE ca.invite_token = ? AND ca.status IN ('invited','started')`,
-      [req.params.token]
-    )
-    if (!attempt) return res.status(404).json({ success: false, message: 'Invalid or expired assessment link' })
-
-    // Get questions (strip correct answers)
-    const [questions] = await db.execute<RowDataPacket[]>(
-      `SELECT b.id, b.title, b.question_type, b.options, b.marks, b.difficulty, aq.order_no
-       FROM bmi_assessment_question aq
-       JOIN bmi_aq_bank b ON b.id = aq.aq_bank_id
-       WHERE aq.assessment_id = ?
-       ORDER BY ${attempt.shuffle_qs ? 'RAND()' : 'aq.order_no'}`,
-      [attempt.assessment_id]
+       JOIN bmi_assessment ass ON ass.id = ca.assessment_id
+       WHERE ca.invite_token = ?`,
+      [token]
     )
 
-    res.json({ success: true, data: { attempt, questions } })
+    if (!rows[0]) return res.status(404).json({ success: false, message: 'Invalid or expired assessment link.' })
+    if (rows[0].status === 'expired') return res.status(410).json({ success: false, message: 'This assessment link has expired.' })
+
+    let questions: any[] = []
+    try {
+      questions = typeof rows[0].questions === 'string'
+        ? JSON.parse(rows[0].questions)
+        : (rows[0].questions ?? [])
+    } catch { questions = [] }
+
+    const sanitized = questions.map((q: any) => ({
+      id:            q.id,
+      title:         q.title,
+      question_type: q.question_type ?? 'single_choice',
+      options:       q.options ?? null,
+      marks:         Number(q.marks ?? 1),
+      difficulty:    q.difficulty ?? 'medium',
+      order_no:      Number(q.order_no ?? 0),
+    }))
+
+    const totalMarks = sanitized.reduce((s: number, q: any) => s + q.marks, 0)
+
+    res.json({
+      success: true,
+      data: {
+        attempt: {
+          id:             rows[0].id,
+          status:         rows[0].status,
+          title:          rows[0].title,
+          instructions:   rows[0].instructions ?? null,
+          time_limit_mins:Number(rows[0].time_limit_mins),
+          total_marks:    totalMarks,
+          passing_score:  Number(rows[0].passing_score ?? 50),
+        },
+        questions: sanitized,
+      },
+    })
   } catch (err) { next(err) }
 })
 
-// ── Start Assessment ──────────────────────────────────────────
+// POST /api/v1/assessments/attempt/:token/start
 assessmentsRouter.post('/attempt/:token/start', async (req, res, next) => {
   try {
-    const [[attempt]] = await db.execute<RowDataPacket[]>(
-      `SELECT ca.id, ca.status FROM bmi_candidate_assessment ca WHERE ca.invite_token = ?`,
-      [req.params.token]
+    const { token } = req.params
+    const [rows] = await db.execute<RowDataPacket[]>(
+      `SELECT id, status FROM bmi_candidate_assessment WHERE invite_token = ?`, [token]
     )
-    if (!attempt) return res.status(404).json({ success: false, message: 'Invalid link' })
-    if (attempt.status === 'completed') return res.status(400).json({ success: false, message: 'Assessment already completed' })
+    if (!rows[0]) return res.status(404).json({ success: false, message: 'Invalid assessment link.' })
+    if (rows[0].status === 'completed') return res.status(409).json({ success: false, message: 'Already submitted.' })
+    if (rows[0].status === 'expired')   return res.status(410).json({ success: false, message: 'Expired.' })
 
     await db.execute(
-      `UPDATE bmi_candidate_assessment SET status='started', started_at=NOW() WHERE id=? AND status='invited'`,
-      [attempt.id]
+      `UPDATE bmi_candidate_assessment SET status='started', started_at=NOW() WHERE id=? AND status!='completed'`,
+      [rows[0].id]
     )
-    res.json({ success: true, message: 'Assessment started' })
+    res.json({ success: true, message: 'Assessment started.' })
   } catch (err) { next(err) }
 })
 
-// ── Submit Assessment Answers ─────────────────────────────────
+// POST /api/v1/assessments/attempt/:token/submit
 assessmentsRouter.post('/attempt/:token/submit', async (req, res, next) => {
   try {
-    const { answers } = req.body as {
+    const { token } = req.params
+    const { answers = [] } = req.body as {
       answers: { question_id: string; selected_options?: string[]; text_answer?: string }[]
     }
 
-    const [[attempt]] = await db.execute<RowDataPacket[]>(
-      `SELECT ca.*, a.total_marks, a.passing_score, a.show_result
+    const [rows] = await db.execute<RowDataPacket[]>(
+      `SELECT ca.id, ca.status, ca.started_at, ca.application_id,
+              ass.questions, ass.passing_score
        FROM bmi_candidate_assessment ca
-       JOIN bmi_assessment a ON a.id = ca.assessment_id
-       WHERE ca.invite_token = ? AND ca.status = 'started'`,
-      [req.params.token]
+       JOIN bmi_assessment ass ON ass.id = ca.assessment_id
+       WHERE ca.invite_token = ?`,
+      [token]
     )
-    if (!attempt) return res.status(404).json({ success: false, message: 'Invalid or already completed' })
+    if (!rows[0]) return res.status(404).json({ success: false, message: 'Invalid assessment link.' })
+    if (rows[0].status === 'completed') return res.status(409).json({ success: false, message: 'Already submitted.' })
 
-    let scored = 0
-    let totalPossible = 0
+    let questions: any[] = []
+    try {
+      questions = typeof rows[0].questions === 'string'
+        ? JSON.parse(rows[0].questions)
+        : (rows[0].questions ?? [])
+    } catch { questions = [] }
 
-    for (const ans of (answers ?? [])) {
-      const [[q]] = await db.execute<RowDataPacket[]>(
-        'SELECT id, question_type, correct_options, marks, negative_marks FROM bmi_aq_bank WHERE id = ?',
-        [ans.question_id]
-      )
-      if (!q) continue
+    const answerMap = new Map<string, { selected_options?: string[]; text_answer?: string }>()
+    for (const a of answers) answerMap.set(a.question_id, a)
 
+    let scoredMarks = 0
+    const totalMarks = questions.reduce((s: number, q: any) => s + Number(q.marks ?? 1), 0)
+    const answersDetail: any[] = []
+
+    for (const q of questions) {
+      const ans = answerMap.get(q.id)
       const marks = Number(q.marks ?? 1)
-      const negMarks = Number(q.negative_marks ?? 0)
-      totalPossible += marks
+      const type  = q.question_type ?? 'single_choice'
       let isCorrect = false
-      let awarded = 0
+      let marksScored = 0
+      let correctOptions: string[] = []
 
-      if (q.question_type === 'short_text' || q.question_type === 'paragraph' || q.question_type === 'scenario') {
-        isCorrect = false
-        awarded = 0
-      } else {
-        const correctOpts: string[] = q.correct_options ? JSON.parse(q.correct_options as any) : []
-        const chosen = ans.selected_options ?? []
-        if (q.question_type === 'single_choice' || q.question_type === 'true_false') {
-          isCorrect = chosen.length === 1 && correctOpts.includes(chosen[0])
-          awarded = isCorrect ? marks : (chosen.length > 0 ? -negMarks : 0)
-        } else if (q.question_type === 'multi_choice') {
-          const correct = correctOpts.every(c => chosen.includes(c)) && chosen.every(c => correctOpts.includes(c))
-          isCorrect = correct
-          awarded = correct ? marks : (chosen.length > 0 ? -negMarks : 0)
+      if (type === 'single_choice' || type === 'true_false') {
+        const correctOpt = Array.isArray(q.options) ? q.options[Number(q.correct_index ?? 0)] : null
+        if (correctOpt) correctOptions = [correctOpt]
+        if (correctOpt && ans?.selected_options?.[0] === correctOpt) {
+          isCorrect = true; marksScored = marks; scoredMarks += marks
+        }
+      } else if (type === 'multi_choice') {
+        const correctIdxs: number[] = Array.isArray(q.correct_indices) ? q.correct_indices : [Number(q.correct_index ?? 0)]
+        correctOptions = correctIdxs.map((i: number) => q.options?.[i]).filter(Boolean).sort()
+        const selected = [...(ans?.selected_options ?? [])].sort()
+        if (JSON.stringify(selected) === JSON.stringify(correctOptions)) {
+          isCorrect = true; marksScored = marks; scoredMarks += marks
         }
       }
+      // text_answer questions: manual review, no auto score
 
-      scored += Math.max(0, awarded)
-
-      await db.execute(
-        `INSERT INTO bmi_candidate_assessment_answer
-          (id, attempt_id, aq_bank_id, selected_options, text_answer, is_correct, marks_awarded)
-         VALUES (UUID(), ?, ?, ?, ?, ?, ?)`,
-        [attempt.id, q.id,
-         ans.selected_options ? JSON.stringify(ans.selected_options) : null,
-         ans.text_answer ?? null,
-         isCorrect ? 1 : 0, Math.max(0, awarded)]
-      )
+      answersDetail.push({
+        question_id: q.id,
+        question_title: q.title,
+        question_type: type,
+        options: q.options ?? null,
+        selected_options: ans?.selected_options ?? null,
+        text_answer: ans?.text_answer ?? null,
+        correct_options: correctOptions.length > 0 ? correctOptions : null,
+        is_correct: isCorrect,
+        marks_available: marks,
+        marks_scored: marksScored,
+      })
     }
 
-    const totalMarks = Number(attempt.total_marks) || totalPossible
-    const percentage = totalMarks > 0 ? Math.round((scored / totalMarks) * 100 * 100) / 100 : 0
-    const passed = percentage >= Number(attempt.passing_score)
-    const timeTaken = attempt.started_at
-      ? Math.round((Date.now() - new Date(attempt.started_at).getTime()) / 1000)
+    const percentage   = totalMarks > 0 ? (scoredMarks / totalMarks) * 100 : 0
+    const passingScore = Number(rows[0].passing_score ?? 50)
+    const passed       = percentage >= passingScore
+    const timeTaken    = rows[0].started_at
+      ? Math.round((Date.now() - new Date(rows[0].started_at).getTime()) / 1000)
       : null
 
     await db.execute(
-      `UPDATE bmi_candidate_assessment
-       SET status='completed', completed_at=NOW(), time_taken_secs=?,
-           total_marks=?, scored_marks=?, percentage=?, passed=?
-       WHERE id=?`,
-      [timeTaken, totalMarks, scored, percentage, passed ? 1 : 0, attempt.id]
+      `UPDATE bmi_candidate_assessment SET status='completed', completed_at=NOW(),
+       scored_marks=?, percentage=?, passed=?, time_taken_secs=?, answers_submitted_json=? WHERE id=?`,
+      [scoredMarks, percentage.toFixed(2), passed ? 1 : 0, timeTaken, JSON.stringify(answersDetail), rows[0].id]
     )
 
-    // Update evaluation score with assessment result
-    await updateAssessmentEval(attempt.application_id, attempt.candidate_id, attempt.id)
+    // Reflect score on application
+    if (rows[0].application_id) {
+      db.execute(`UPDATE bmi_application SET ai_match_score=? WHERE id=?`,
+        [percentage.toFixed(2), rows[0].application_id]).catch(() => {})
 
-    res.json({ success: true, message: 'Assessment submitted', data: attempt.show_result ? { scored, totalMarks, percentage, passed } : null })
-  } catch (err) { next(err) }
-})
+      // ── 90% Rule Check ─────────────────────────────────────
+      ;(async () => {
+        try {
+          const appId = rows[0].application_id
 
-async function updateAssessmentEval(applicationId: string, candidateId: string, attemptId: string) {
-  try {
-    const [[att]] = await db.execute<RowDataPacket[]>(
-      'SELECT percentage FROM bmi_candidate_assessment WHERE id = ?', [attemptId]
-    )
-    if (!att) return
+          // Get profile match score from evaluation
+          const [evalRows] = await db.execute<RowDataPacket[]>(
+            `SELECT total_score FROM bmi_evaluation_score WHERE application_id = ? LIMIT 1`,
+            [appId]
+          )
+          const profileMatchPct = evalRows[0] ? Number((evalRows[0] as any).total_score) : null
 
-    // Check if evaluation_score row exists
-    const [[existing]] = await db.execute<RowDataPacket[]>(
-      'SELECT id, profile_score, education_score, experience_score, skill_score, resume_score FROM bmi_evaluation_score WHERE application_id = ?',
-      [applicationId]
-    )
+          // Get assessment score
+          const assessmentPct = percentage
 
-    const asmtScore = Number(att.percentage ?? 0)
+          const profilePassed = profileMatchPct !== null && profileMatchPct >= 90
+          const assessmentPassed = assessmentPct >= 90
+          const bothPassed = profilePassed && assessmentPassed
 
-    if (existing?.id) {
-      const total = computeTotal(
-        Number(existing.profile_score), Number(existing.education_score),
-        Number(existing.experience_score), Number(existing.skill_score),
-        Number(existing.resume_score), asmtScore
-      )
-      await db.execute(
-        `UPDATE bmi_evaluation_score SET assessment_score=?, total_score=?, recommendation=?, updated_at=NOW()
-         WHERE id=?`,
-        [asmtScore, total, getRecommendation(total), existing.id]
-      )
+          // Log match result
+          await db.execute(
+            `INSERT INTO bmi_match_result
+              (id, application_id, profile_match_pct, assessment_pct,
+               profile_passed, assessment_passed, both_passed, checked_at)
+             VALUES (UUID(), ?, ?, ?, ?, ?, ?, NOW())
+             ON DUPLICATE KEY UPDATE
+               profile_match_pct = VALUES(profile_match_pct),
+               assessment_pct = VALUES(assessment_pct),
+               profile_passed = VALUES(profile_passed),
+               assessment_passed = VALUES(assessment_passed),
+               both_passed = VALUES(both_passed),
+               checked_at = NOW()`,
+            [
+              appId,
+              profileMatchPct !== null ? profileMatchPct.toFixed(2) : null,
+              assessmentPct.toFixed(2),
+              profilePassed ? 1 : 0,
+              assessmentPassed ? 1 : 0,
+              bothPassed ? 1 : 0,
+            ]
+          )
+
+          // If both passed, trigger interview scheduling flow
+          if (bothPassed) {
+            const [appRows] = await db.execute<RowDataPacket[]>(
+              `SELECT a.id, a.candidate_id, a.job_id, a.tenant_id,
+                      c.email AS candidate_email, c.full_name AS candidate_name,
+                      j.title AS job_title, t.company_name
+               FROM bmi_application a
+               JOIN bmi_candidate c ON c.id = a.candidate_id
+               JOIN bmi_job j ON j.id = a.job_id
+               JOIN bmi_tenant t ON t.id = a.tenant_id
+               WHERE a.id = ?`,
+              [appId]
+            )
+            if (appRows[0]) {
+              const app = appRows[0] as any
+
+              // Update application stage
+              await db.execute(
+                `UPDATE bmi_application SET
+                  current_stage_name = 'Interview Scheduled',
+                  status = 'active',
+                  updated_at = NOW()
+                 WHERE id = ?`,
+                [appId]
+              )
+
+              // Send email to candidate to schedule interview
+              const { sendInterviewScheduleEmail } = await import('../../services/email.service.js')
+              sendInterviewScheduleEmail(
+                app.candidate_email,
+                app.candidate_name,
+                app.job_title,
+                'TBD (Schedule via portal)',
+                'Flexible',
+                'Online',
+                undefined
+              ).catch(() => {})
+
+              // Notify super admin about qualified candidate
+              await db.execute(
+                `INSERT INTO bmi_notification_log
+                  (id, tenant_id, channel, recipient_type, recipient_id, subject, body,
+                   event_key, reference_id, reference_type, status, created_at)
+                 VALUES (UUID(), ?, 'in_app', 'platform_admin', 'all',
+                  ?, ?, 'candidate_qualified', ?, 'application', 'sent', NOW())`,
+                [
+                  app.tenant_id,
+                  `Qualified Candidate: ${app.candidate_name} for ${app.job_title}`,
+                  `${app.candidate_name} has qualified (profile: ${profileMatchPct?.toFixed(0) ?? 'N/A'}%, assessment: ${assessmentPct.toFixed(0)}%) for "${app.job_title}" at ${app.company_name}. Ready for interview scheduling.`,
+                  appId,
+                ]
+              )
+            }
+          }
+        } catch (e: any) {
+          console.error('[90pct-rule]', e.message)
+        }
+      })()
     }
-    // If no row yet, the evaluation engine will pick it up on next run
-  } catch { /* non-fatal */ }
-}
-
-function computeTotal(p: number, ed: number, ex: number, sk: number, re: number, as: number): number {
-  return Math.round(
-    (p * 0.25 + ed * 0.15 + ex * 0.20 + sk * 0.20 + re * 0.10 + as * 0.10) * 100
-  ) / 100
-}
-
-function getRecommendation(score: number): string {
-  if (score >= 85) return 'highly_recommended'
-  if (score >= 70) return 'recommended'
-  if (score >= 50) return 'review_required'
-  return 'not_recommended'
-}
-
-// ── HR: View All Assessment Attempts for a Job ────────────────
-assessmentsRouter.get('/results/job/:jobId', requireAuth, async (req: AuthRequest, res, next) => {
-  try {
-    const [rows] = await db.execute<RowDataPacket[]>(
-      `SELECT ca.id, ca.status, ca.percentage, ca.passed, ca.completed_at, ca.time_taken_secs,
-              c.full_name, c.email, c.profile_photo_url,
-              a.current_stage_name
-       FROM bmi_candidate_assessment ca
-       JOIN bmi_application a ON a.id = ca.application_id
-       JOIN bmi_candidate c ON c.id = ca.candidate_id
-       WHERE a.job_id = ? AND a.tenant_id = ?
-       ORDER BY ca.completed_at DESC`,
-      [req.params.jobId, req.user!.tenant_id]
-    )
-    res.json({ success: true, data: rows })
+    res.json({
+      success: true,
+      message: passed ? 'Congratulations! You passed.' : 'Assessment submitted.',
+      data: { scored: scoredMarks, totalMarks, percentage: parseFloat(percentage.toFixed(1)), passed },
+    })
   } catch (err) { next(err) }
 })

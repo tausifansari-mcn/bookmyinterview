@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
-import { portalApi, uploadApi } from '@/lib/portalApi'
-import { ResumeUpload, type ParsedResumeData } from '@/components/ui/ResumeUpload'
+import { portalApi } from '@/lib/portalApi'
 import { useCandidateAuth } from '@/contexts/CandidateAuthContext'
 import {
   User, Briefcase, GraduationCap, Award, Languages, FileText, ChevronDown,
@@ -10,8 +9,6 @@ import {
   Camera, Upload, Mic, Video, Square, RotateCcw, Zap, Link2, MapPin,
   Phone, Mail, Globe, Edit3, Save, Bookmark, MessageSquare, Sparkles
 } from 'lucide-react'
-
-import { toast } from 'sonner'
 
 // ── auth header helper ────────────────────────────────────────
 const authHdr = () => ({
@@ -151,8 +148,6 @@ export default function PortalProfilePage() {
   const navigate = useNavigate()
   const [toastState, setToastState] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [completion, setCompletion] = useState(0)
-  const [autofilling, setAutofilling] = useState(false)
-  const [autofillDone, setAutofillDone] = useState(false)
 
   function showToast(msg: string, type: 'success' | 'error' = 'success') {
     setToastState({ msg, type })
@@ -203,9 +198,15 @@ export default function PortalProfilePage() {
       const { data } = await axios.post('/api/v1/upload/resume', fd, { headers: authHdr() })
       setResumeUrl(data.data.url)
       setPersonal((p: any) => ({ ...p, resume_url: data.data.url }))
-      showToast('Resume uploaded! Click "Auto-fill with AI" to parse it.')
-      setParseStep(data.data.has_text ? 'ready' : 'idle')
       refreshCompletion()
+      if (data.data.has_text) {
+        showToast('Resume uploaded! Parsing with AI...')
+        setParseStep('parsing')
+        parseResumeWithAI()
+      } else {
+        showToast('Resume uploaded! Click "Auto-fill with AI" to parse it.')
+        setParseStep('ready')
+      }
     } catch (err: any) { showToast(err?.response?.data?.message ?? 'Resume upload failed', 'error') }
     finally { setUploadingResume(false); e.target.value = '' }
   }
@@ -220,7 +221,13 @@ export default function PortalProfilePage() {
       setPersonal((prev: any) => ({
         ...prev,
         full_name:             p.full_name            || prev.full_name,
+        middle_name:           p.middle_name          || prev.middle_name,
+        last_name:             p.last_name            || prev.last_name,
         mobile:                p.mobile               || prev.mobile,
+        alternate_email:       p.alternate_email      || prev.alternate_email,
+        gender:                p.gender               || prev.gender,
+        date_of_birth:         p.date_of_birth        || prev.date_of_birth,
+        nationality:           p.nationality          || prev.nationality,
         linkedin_url:          p.linkedin_url         || prev.linkedin_url,
         github_url:            p.github_url           || prev.github_url,
         portfolio_url:         p.portfolio_url        || prev.portfolio_url,
@@ -228,9 +235,18 @@ export default function PortalProfilePage() {
         current_designation:   p.current_designation  || prev.current_designation,
         total_experience_years: p.total_experience_years || prev.total_experience_years,
         current_location:      p.current_location     || prev.current_location,
+        current_city:          p.current_city         || prev.current_city,
+        current_state:         p.current_state        || prev.current_state,
+        current_country:       p.current_country      || prev.current_country,
+        highest_education:     p.highest_education    || prev.highest_education,
         professional_summary:  p.professional_summary || prev.professional_summary,
         career_objective:      p.career_objective     || prev.career_objective,
       }))
+
+      // Also save email to profile if AI found one
+      if (p.email) {
+        try { await portalApi.patch('/me', { alternate_email: p.email }) } catch {}
+      }
 
       let added = 0
       // Add skills
@@ -249,8 +265,12 @@ export default function PortalProfilePage() {
       for (const cert of (p.certifications ?? [])) {
         try { await portalApi.post('/me/certifications', cert); added++ } catch {}
       }
+      // Add languages
+      for (const lang of (p.languages ?? [])) {
+        try { await portalApi.post('/me/languages', lang); added++ } catch {}
+      }
       // Reload all sections
-      loadEducations(); loadExperiences(); loadSkills(); loadCerts()
+      loadEducations(); loadExperiences(); loadSkills(); loadCerts(); loadLangs()
       refreshCompletion()
       showToast(`AI auto-filled your profile (${added} entries added). Review & save.`)
       setParseStep('done')
@@ -258,147 +278,27 @@ export default function PortalProfilePage() {
     finally { setParsingAI(false) }
   }
 
-  async function handleAutofill() {
-    setAutofilling(true)
-    setAutofillDone(false)
+  async function handleDeleteResume() {
+    if (!confirm('Are you sure you want to delete your resume?')) return
     try {
-      const res = await uploadApi.post('/parse-resume')
-      const parsed = res.data.data
-
-      // Update basic profile fields
-      const basicPatch: Record<string, any> = {}
-      const fieldMap: Record<string, string> = {
-        full_name: 'full_name', middle_name: 'middle_name', last_name: 'last_name',
-        linkedin_url: 'linkedin_url', github_url: 'github_url', portfolio_url: 'portfolio_url',
-        current_company: 'current_company', current_designation: 'current_designation',
-        current_location: 'current_location', professional_summary: 'professional_summary',
-        career_objective: 'career_objective',
-      }
-      for (const [parsedKey, profileKey] of Object.entries(fieldMap)) {
-        if (parsed[parsedKey]) basicPatch[profileKey] = parsed[parsedKey]
-      }
-      if (parsed.total_experience_years != null) {
-        basicPatch.experience_years = parsed.total_experience_years
-        basicPatch.total_experience_years = parsed.total_experience_years
-      }
-      if (Object.keys(basicPatch).length > 0) {
-        await portalApi.patch('/me', basicPatch)
-      }
-
-      // Batch-add skills
-      if (Array.isArray(parsed.skills) && parsed.skills.length > 0) {
-        await Promise.allSettled(parsed.skills.slice(0, 20).map((s: any) =>
-          portalApi.post('/me/skills', {
-            skill_name: s.skill_name,
-            skill_level: s.skill_level ?? 'intermediate',
-          })
-        ))
-      }
-
-      // Batch-add education
-      if (Array.isArray(parsed.education) && parsed.education.length > 0) {
-        await Promise.allSettled(parsed.education.slice(0, 5).map((e: any) =>
-          portalApi.post('/me/education', {
-            qualification: e.qualification ?? 'Bachelor',
-            degree: e.degree ?? 'Unknown',
-            specialization: e.specialization ?? null,
-            institute: e.institute ?? 'Unknown',
-            university: e.university ?? null,
-            passing_year: e.passing_year ?? null,
-            percentage: e.percentage ?? null,
-          })
-        ))
-      }
-
-      // Batch-add work experience
-      if (Array.isArray(parsed.experience) && parsed.experience.length > 0) {
-        await Promise.allSettled(parsed.experience.slice(0, 5).map((ex: any, i: number) =>
-          portalApi.post('/me/experience', {
-            company_name: ex.company_name ?? 'Unknown',
-            designation: ex.designation ?? 'Unknown',
-            joining_date: ex.joining_date ?? '2020-01-01',
-            relieving_date: ex.relieving_date ?? null,
-            is_current: ex.is_current ?? (i === 0 ? 1 : 0),
-            roles_responsibilities: ex.roles_responsibilities ?? null,
-          })
-        ))
-      }
-
-      setAutofillDone(true)
-      toast.success('Profile auto-filled from resume! Review each section and save.')
-      // Reload profile data
-      setTimeout(() => window.location.reload(), 1500)
-    } catch (err: any) {
-      toast.error(err.response?.data?.message ?? 'Auto-fill failed. Please upload a PDF resume first.')
-    } finally {
-      setAutofilling(false)
-    }
-  }
-
-  function handleResumeParseComplete(parsed: ParsedResumeData) {
-    // Pre-fill personal state with non-null values from parsed data
-    setPersonal((prev: any) => ({
-      ...prev,
-      full_name:              parsed.full_name              || prev.full_name,
-      middle_name:            parsed.middle_name            || prev.middle_name,
-      last_name:              parsed.last_name              || prev.last_name,
-      mobile:                 parsed.mobile                 || prev.mobile,
-      linkedin_url:           parsed.linkedin_url           || prev.linkedin_url,
-      github_url:             parsed.github_url             || prev.github_url,
-      portfolio_url:          parsed.portfolio_url          || prev.portfolio_url,
-      current_company:        parsed.current_company        || prev.current_company,
-      current_designation:    parsed.current_designation    || prev.current_designation,
-      total_experience_years: parsed.total_experience_years ?? prev.total_experience_years,
-      current_location:       parsed.current_location       || prev.current_location,
-      professional_summary:   parsed.professional_summary   || prev.professional_summary,
-      career_objective:       parsed.career_objective       || prev.career_objective,
-    }))
-
-    // Batch-add skills, education, experience in background
-    ;(async () => {
-      for (const sk of (parsed.skills ?? [])) {
-        try { await portalApi.post('/me/skills', sk) } catch {}
-      }
-      for (const edu of (parsed.education ?? [])) {
-        try {
-          await portalApi.post('/me/education', {
-            qualification:  edu.qualification  ?? 'Bachelor',
-            degree:         edu.degree         ?? '',
-            specialization: edu.specialization ?? null,
-            institute:      edu.institute      ?? '',
-            university:     edu.university     ?? null,
-            passing_year:   edu.passing_year   ?? null,
-            percentage:     edu.percentage     ?? null,
-          })
-        } catch {}
-      }
-      for (const exp of (parsed.experience ?? [])) {
-        try {
-          await portalApi.post('/me/experience', {
-            company_name:          exp.company_name          ?? '',
-            designation:           exp.designation           ?? '',
-            joining_date:          exp.joining_date          ?? '2020-01-01',
-            relieving_date:        exp.relieving_date        ?? null,
-            is_current:            exp.is_current            ?? 0,
-            roles_responsibilities: exp.roles_responsibilities ?? null,
-          })
-        } catch {}
-      }
-      for (const cert of (parsed.certifications ?? [])) {
-        try {
-          await portalApi.post('/me/certifications', {
-            certification_name:   cert.certification_name   ?? '',
-            issuing_organization: cert.issuing_organization ?? '',
-            issue_date:           cert.issue_date           ?? null,
-          })
-        } catch {}
-      }
+      await portalApi.delete('/me/resume')
+      setResumeUrl('')
+      setResumeFileName('')
+      setParseStep('idle')
+      setPersonal((p: any) => ({ ...p, resume_url: '' }))
       refreshCompletion()
-    })()
+      showToast('Resume deleted successfully.')
+    } catch (err: any) {
+      showToast(err?.response?.data?.message ?? 'Failed to delete resume', 'error')
+    }
   }
 
   // ── Voice / Video intro recording ────────────────────────
   const [mediaUrl, setMediaUrl]             = useState('')
+  const [introScore, setIntroScore]         = useState<number|null>(null)
+  const [introTranscript, setIntroTranscript] = useState<string|null>(null)
+  const [introFeedback, setIntroFeedback]   = useState<string|null>(null)
+  const [showTranscript, setShowTranscript] = useState(false)
   const [recordMode, setRecordMode]         = useState<'audio'|'video'>('audio')
   const [recording, setRecording]           = useState(false)
   const [recordingTime, setRecordingTime]   = useState(0)
@@ -516,6 +416,9 @@ export default function PortalProfilePage() {
       if (d.profile_photo_url) setPhotoUrl(d.profile_photo_url)
       if (d.resume_url)        { setResumeUrl(d.resume_url); setParseStep(d.resume_text ? 'ready' : 'idle') }
       if (d.voice_intro_url)   setMediaUrl(d.voice_intro_url)
+      if (d.intro_score != null) setIntroScore(d.intro_score)
+      if (d.intro_transcript)    setIntroTranscript(d.intro_transcript)
+      if (d.intro_feedback)      setIntroFeedback(d.intro_feedback)
     }).catch(() => {})
     refreshCompletion()
   }, [candidate])
@@ -814,83 +717,47 @@ export default function PortalProfilePage() {
                   <p className="text-sm font-medium text-gray-800 truncate">{resumeFileName || 'Resume uploaded'}</p>
                   <a href={resumeUrl} target="_blank" rel="noopener" className="text-xs text-violet-600 hover:underline">View file</a>
                 </div>
-                <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                <div className="flex items-center gap-1.5">
+                  {parseStep === 'done' ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                  ) : parseStep === 'parsing' ? (
+                    <Loader2 className="h-4 w-4 text-violet-500 shrink-0 animate-spin" />
+                  ) : null}
+                  <button onClick={handleDeleteResume}
+                    className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                    title="Delete resume">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             ) : (
               <div onClick={() => resumeInputRef.current?.click()}
                 className="mb-3 border-2 border-dashed border-gray-200 rounded-xl p-5 text-center cursor-pointer hover:border-violet-400 hover:bg-violet-50/50 transition-all group">
                 <Upload className="h-7 w-7 text-gray-300 group-hover:text-violet-400 mx-auto mb-2 transition-colors" />
                 <p className="text-sm text-gray-500 group-hover:text-violet-600">Click to upload your resume</p>
+                <p className="text-xs text-gray-400 mt-1">PDF, DOC or DOCX — AI will auto-fill your profile</p>
               </div>
             )}
 
-            {/* Smart resume upload — auto-fills entire profile */}
-            <div className="pt-4">
-              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-3">
-                Auto-fill from Resume
-              </p>
-              <ResumeUpload onParseComplete={handleResumeParseComplete} />
-              <div className="relative my-5">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-zinc-100 dark:border-zinc-800" />
-                </div>
-                <div className="relative flex justify-center text-xs">
-                  <span className="bg-white dark:bg-zinc-900 px-3 text-zinc-400">or upload manually below</span>
-                </div>
-              </div>
-            </div>
-
             <input ref={resumeInputRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={handleResumeChange} />
 
-            <div className="flex gap-2 flex-wrap">
-              <button onClick={() => resumeInputRef.current?.click()} disabled={uploadingResume}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 font-medium transition-colors disabled:opacity-60">
-                {uploadingResume ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                {resumeUrl ? 'Replace' : 'Upload'}
+            {parseStep === 'parsing' && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-50 text-violet-700 text-xs font-medium">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> AI is reading your resume...
+              </div>
+            )}
+            {parseStep === 'ready' && (
+              <button onClick={parseResumeWithAI} disabled={parsingAI}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-violet-600 text-white text-xs font-semibold hover:bg-violet-700 transition-colors disabled:opacity-60">
+                {parsingAI ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                {parsingAI ? 'Parsing with AI...' : 'Auto-fill with AI'}
               </button>
-
-              {parseStep === 'ready' && (
-                <button onClick={parseResumeWithAI} disabled={parsingAI}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-semibold hover:opacity-90 transition-all shadow-md disabled:opacity-60">
-                  {parsingAI
-                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Parsing with AI…</>
-                    : <><Zap className="h-3.5 w-3.5" />Auto-fill with AI</>}
-                </button>
-              )}
-              {parseStep === 'done' && (
-                <span className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 text-sm font-medium border border-emerald-200">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> AI parsed!
-                </span>
-              )}
-              {parseStep === 'parsing' && (
-                <span className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-50 text-violet-700 text-sm font-medium">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Reading your resume…
-                </span>
-              )}
-            </div>
-
-            <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
-              <p className="text-xs text-zinc-500 mb-3">Uploaded a PDF resume? Auto-fill your profile in one click.</p>
-              <button
-                onClick={handleAutofill}
-                disabled={autofilling}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-semibold rounded-lg transition-colors"
-              >
-                {autofilling ? (
-                  <>
-                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Auto-filling…
-                  </>
-                ) : autofillDone ? (
-                  <>✓ Auto-filled!</>
-                ) : (
-                  <>
-                    <Sparkles className="h-4 w-4" />
-                    Auto-fill from Resume
-                  </>
-                )}
-              </button>
-            </div>
+            )}
+            {parseStep === 'done' && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Profile auto-filled from resume!
+              </div>
+            )}
           </div>
 
           {/* Voice / Video intro card */}
@@ -905,14 +772,46 @@ export default function PortalProfilePage() {
               </div>
             </div>
 
-            {/* Existing recording player */}
+            {/* Existing recording player + score */}
             {mediaUrl && !recordedUrl && (
-              <div className="mb-3 p-3 bg-rose-50 border border-rose-200 rounded-xl">
-                <p className="text-xs text-gray-500 mb-2 font-medium">Saved introduction</p>
-                {mediaUrl.split('/').pop()?.startsWith('video-') ? (
-                  <video src={mediaUrl} controls className="w-full rounded-lg max-h-28" />
-                ) : (
-                  <audio src={mediaUrl} controls className="w-full" />
+              <div className="mb-3 space-y-2">
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl">
+                  <p className="text-xs text-gray-500 mb-2 font-medium">Saved introduction</p>
+                  {mediaUrl.split('/').pop()?.startsWith('video-') ? (
+                    <video src={mediaUrl} controls className="w-full rounded-lg max-h-28" />
+                  ) : (
+                    <audio src={mediaUrl} controls className="w-full" />
+                  )}
+                </div>
+
+                {/* Score + feedback */}
+                {introScore != null && (
+                  <div className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border ${introScore >= 80 ? 'bg-emerald-50 border-emerald-200' : introScore >= 60 ? 'bg-amber-50 border-amber-200' : 'bg-zinc-50 border-zinc-200'}`}>
+                    <div className={`text-2xl font-black leading-none ${introScore >= 80 ? 'text-emerald-600' : introScore >= 60 ? 'text-amber-600' : 'text-zinc-500'}`}>
+                      {introScore}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Intro Score</p>
+                      {introFeedback && <p className="text-[12px] text-gray-600 leading-snug mt-0.5">{introFeedback}</p>}
+                    </div>
+                    {introScore >= 80 && <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />}
+                  </div>
+                )}
+
+                {/* Transcript (collapsible) */}
+                {introTranscript && (
+                  <div>
+                    <button onClick={() => setShowTranscript(x => !x)}
+                      className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-400 hover:text-rose-600 transition-colors">
+                      <Mic className="h-3 w-3" />
+                      {showTranscript ? 'Hide transcript ↑' : 'View transcript ↓'}
+                    </button>
+                    {showTranscript && (
+                      <div className="mt-1.5 bg-violet-50 border border-violet-200 rounded-xl p-3 text-[12px] text-gray-700 leading-relaxed">
+                        {introTranscript}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             )}

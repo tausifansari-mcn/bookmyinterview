@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '@/lib/api'
-import { Search, User } from 'lucide-react'
+import { Search, Users, ArrowUpRight } from 'lucide-react'
 
 interface Candidate {
   id: string
@@ -19,107 +19,149 @@ interface Candidate {
 }
 
 function Avatar({ name, photo }: { name: string; photo: string | null }) {
-  if (photo) return <img src={photo} className="h-8 w-8 rounded-full object-cover" alt={name} />
-  const i = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+  if (photo) return (
+    <img src={photo} className="h-9 w-9 rounded-full object-cover ring-2 ring-white shadow-sm shrink-0" alt={name} />
+  )
+  const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
   return (
-    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-      <span className="text-xs font-semibold text-primary">{i}</span>
+    <div className="h-9 w-9 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0"
+      style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}>
+      {initials}
+    </div>
+  )
+}
+
+const SOURCE_BADGE: Record<string, string> = {
+  linkedin:  'badge badge-blue',
+  naukri:    'badge badge-amber',
+  referral:  'badge badge-green',
+  direct:    'badge badge-gray',
+  portal:    'badge badge-indigo',
+  other:     'badge badge-gray',
+}
+
+function CompletionBar({ pct }: { pct: number }) {
+  const color = pct >= 80 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#6366f1'
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+        <div className="h-1.5 rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
+      </div>
+      <span className="text-[11px] font-medium text-slate-500">{pct}%</span>
     </div>
   )
 }
 
 export default function CandidatesPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([])
-  const [total, setTotal] = useState(0)
+  const [total,   setTotal]   = useState(0)
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
+  const [search,  setSearch]  = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const { data } = await api.get('/candidates', { params: { search: search || undefined, limit: 50 } })
+      const { data } = await api.get('/candidates', {
+        params: { search: search || undefined, limit: 50 },
+      })
       setCandidates(data.data)
       setTotal(data.total ?? data.data.length)
-    } catch { setCandidates([]) } finally { setLoading(false) }
+    } catch { setCandidates([]) }
+    finally { setLoading(false) }
   }, [search])
 
   useEffect(() => { load() }, [load])
 
   return (
     <div className="space-y-5">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Candidates</h1>
-          <p className="text-muted-foreground text-sm">{total} in talent pool</p>
+          <h1 className="page-title">Candidates</h1>
+          <p className="page-sub">{total.toLocaleString()} in talent pool</p>
         </div>
       </div>
 
-      <div className="flex gap-3">
-        <div className="flex-1 flex items-center gap-2 bg-card border rounded-lg px-3 py-2">
-          <Search className="h-4 w-4 text-muted-foreground" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name, email or mobile..."
-            className="flex-1 text-sm bg-transparent outline-none"
-          />
-        </div>
+      {/* Search bar */}
+      <div className="flex items-center gap-2.5 bg-white border border-slate-200 rounded-xl px-4 py-2.5 max-w-md
+                      focus-within:border-indigo-400 focus-within:ring-3 focus-within:ring-indigo-500/10 transition-all">
+        <Search className="h-4 w-4 text-slate-400 shrink-0" />
+        <input
+          value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Search by name, email or mobile…"
+          className="flex-1 text-sm text-slate-900 placeholder:text-slate-400 bg-transparent outline-none"
+        />
       </div>
 
-      <div className="bg-card border rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="border-b bg-muted/30">
+      {/* Table */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <table className="w-full text-sm bmi-table">
+          <thead>
             <tr>
-              {['Candidate','Contact','Experience','Designation','Profile','Source','Joined'].map(h => (
-                <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">{h}</th>
+              {['Candidate', 'Contact', 'Role & Location', 'Profile', 'Source', 'Joined', ''].map(h => (
+                <th key={h}>{h}</th>
               ))}
-              <th className="px-4 py-3 text-xs font-semibold text-muted-foreground" />
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i} className="border-b">
-                  {Array.from({ length: 8 }).map((_, j) => (
-                    <td key={j} className="px-4 py-3"><div className="h-4 bg-muted animate-pulse rounded" /></td>
+              Array.from({ length: 6 }).map((_, i) => (
+                <tr key={i}>
+                  {Array.from({ length: 7 }).map((_, j) => (
+                    <td key={j}><div className="h-4 bg-slate-100 rounded animate-pulse" style={{ width: j === 0 ? 140 : 80 }} /></td>
                   ))}
                 </tr>
               ))
             ) : candidates.length === 0 ? (
-              <tr><td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
-                <User className="h-8 w-8 mx-auto mb-2" />No candidates found
-              </td></tr>
+              <tr>
+                <td colSpan={7} className="py-16 text-center">
+                  <Users className="h-10 w-10 text-slate-200 mx-auto mb-3" />
+                  <p className="text-slate-500 font-medium">No candidates found</p>
+                  <p className="text-slate-400 text-xs mt-1">
+                    {search ? 'Try a different search term' : 'Candidates will appear here when they register'}
+                  </p>
+                </td>
+              </tr>
             ) : candidates.map(c => (
-              <tr key={c.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
+              <tr key={c.id}>
+                <td>
+                  <div className="flex items-center gap-3">
                     <Avatar name={c.full_name} photo={c.profile_photo_url} />
-                    <div>
-                      <Link to={`/candidates/${c.id}`} className="font-medium hover:text-primary">{c.full_name}</Link>
-                      <p className="text-xs text-muted-foreground">{c.candidate_code}</p>
+                    <div className="min-w-0">
+                      <Link to={`/candidates/${c.id}`}
+                        className="font-semibold text-slate-900 hover:text-indigo-600 transition-colors truncate block text-[13px]">
+                        {c.full_name}
+                      </Link>
+                      <p className="text-[11px] text-slate-400">{c.candidate_code}</p>
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  <p>{c.mobile}</p>
-                  <p className="text-xs">{c.email}</p>
+                <td>
+                  <p className="text-[13px] text-slate-700">{c.mobile}</p>
+                  <p className="text-[11px] text-slate-400 truncate max-w-[160px]">{c.email}</p>
                 </td>
-                <td className="px-4 py-3">{c.experience_years != null ? `${c.experience_years} yrs` : '—'} · {c.current_location ?? '—'}</td>
-                <td className="px-4 py-3 text-muted-foreground">{c.current_designation ?? '—'}</td>
-                <td className="px-4 py-3">
-                  {c.profile_completion != null ? (
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden w-16">
-                        <div className="h-1.5 bg-primary rounded-full" style={{ width: `${c.profile_completion}%` }} />
-                      </div>
-                      <span className="text-xs text-muted-foreground">{c.profile_completion}%</span>
-                    </div>
-                  ) : '—'}
+                <td>
+                  <p className="text-[13px] text-slate-700">{c.current_designation ?? '—'}</p>
+                  <p className="text-[11px] text-slate-400">{c.current_location ?? '—'} {c.experience_years != null && `· ${c.experience_years} yrs`}</p>
                 </td>
-                <td className="px-4 py-3 capitalize text-muted-foreground">{(c.source ?? 'direct').replace('_', ' ')}</td>
-                <td className="px-4 py-3 text-muted-foreground">{new Date(c.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
-                <td className="px-4 py-3">
-                  <Link to={`/candidates/${c.id}`} className="text-xs text-primary font-medium hover:underline">View →</Link>
+                <td>
+                  {c.profile_completion != null
+                    ? <CompletionBar pct={c.profile_completion} />
+                    : <span className="text-slate-300">—</span>}
+                </td>
+                <td>
+                  <span className={SOURCE_BADGE[c.source ?? 'direct'] ?? 'badge badge-gray'}>
+                    {(c.source ?? 'direct').replace(/_/g, ' ')}
+                  </span>
+                </td>
+                <td className="text-[12px] text-slate-400 whitespace-nowrap">
+                  {new Date(c.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                </td>
+                <td>
+                  <Link to={`/candidates/${c.id}`}
+                    className="inline-flex items-center gap-1 text-[12px] font-semibold text-indigo-600 hover:text-indigo-700 transition-colors">
+                    View <ArrowUpRight className="h-3 w-3" />
+                  </Link>
                 </td>
               </tr>
             ))}

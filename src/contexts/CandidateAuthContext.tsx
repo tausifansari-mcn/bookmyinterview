@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
-import { api } from '@/lib/api'
+import { portalApi } from '@/lib/portalApi'
 
 interface Candidate {
   id: string
@@ -38,20 +38,20 @@ export function CandidateAuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const token = localStorage.getItem('bmi_candidate_token')
     if (!token) { setLoading(false); return }
-    api.get('/portal/me', { headers: { Authorization: `Bearer ${token}` } })
+    portalApi.get('/me')
       .then(r => setCandidate(r.data.data))
       .catch(() => localStorage.removeItem('bmi_candidate_token'))
       .finally(() => setLoading(false))
   }, [])
 
   async function login(email: string, password: string) {
-    const { data } = await api.post('/portal/login', { email, password })
+    const { data } = await portalApi.post('/login', { email, password })
     localStorage.setItem('bmi_candidate_token', data.data.token)
     setCandidate(data.data.candidate)
   }
 
   async function register(formData: RegisterData) {
-    const { data } = await api.post('/portal/register', formData)
+    const { data } = await portalApi.post('/register', formData)
     localStorage.setItem('bmi_candidate_token', data.data.token)
     setCandidate(data.data.candidate)
   }

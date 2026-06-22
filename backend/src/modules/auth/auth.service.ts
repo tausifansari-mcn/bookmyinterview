@@ -25,7 +25,7 @@ export const authService = {
     const accessToken = jwt.sign(
       { sub: user.id, email: user.email, role: user.role, roles: [user.role], tenant_id: user.tenant_id },
       env.JWT_SECRET,
-      { expiresIn: env.JWT_EXPIRES_IN }
+      { expiresIn: env.JWT_EXPIRES_IN as jwt.SignOptions['expiresIn'] }
     )
 
     const refreshToken = randomUUID()

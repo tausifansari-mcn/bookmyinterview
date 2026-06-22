@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, KeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, MapPin, Users, Clock, Sparkles, Loader2, X, ChevronDown, CheckCircle } from 'lucide-react'
+import { Plus, Search, MapPin, Clock, Sparkles, Loader2, X, ChevronDown, CheckCircle, Briefcase } from 'lucide-react'
 import { api } from '@/lib/api'
 
 interface Job {
@@ -154,36 +154,34 @@ export default function JobsPage() {
   return (
     <div className="space-y-5">
       {successMsg && (
-        <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg text-sm">
-          <CheckCircle className="h-4 w-4 flex-shrink-0 text-green-600" />
-          {successMsg}
+        <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-100 text-emerald-800 px-4 py-3 rounded-xl text-sm">
+          <CheckCircle className="h-4 w-4 shrink-0 text-emerald-600" />
+          <span className="font-medium">{successMsg}</span>
         </div>
       )}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Jobs</h1>
-          <p className="text-muted-foreground text-sm">{jobs.length} position{jobs.length !== 1 ? 's' : ''}</p>
+          <h1 className="page-title">Jobs</h1>
+          <p className="page-sub">{jobs.length} position{jobs.length !== 1 ? 's' : ''}</p>
         </div>
-        <button
-          onClick={openModal}
-          className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90"
-        >
+        <button onClick={openModal} className="btn-primary">
           <Plus className="h-4 w-4" /> Post New Job
         </button>
       </div>
 
       <div className="flex gap-3">
-        <div className="flex items-center gap-2 flex-1 bg-card border rounded-lg px-3 py-2">
-          <Search className="h-4 w-4 text-muted-foreground" />
+        <div className="flex items-center gap-2.5 bg-white border border-slate-200 rounded-xl px-4 py-2.5 flex-1 max-w-sm
+                        focus-within:border-indigo-400 focus-within:ring-3 focus-within:ring-indigo-500/10 transition-all">
+          <Search className="h-4 w-4 text-slate-400 shrink-0" />
           <input
             value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search jobs…"
-            className="flex-1 text-sm bg-transparent outline-none"
+            className="flex-1 text-sm text-slate-900 placeholder:text-slate-400 bg-transparent outline-none"
           />
         </div>
         <select
           value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-          className="border rounded-lg px-3 py-2 text-sm bg-card outline-none"
+          className="field w-auto"
         >
           <option value="">All status</option>
           <option value="open">Open</option>
@@ -193,46 +191,54 @@ export default function JobsPage() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+        <div className="grid gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 h-28 animate-pulse" />
+          ))}
+        </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16 text-muted-foreground">
-          <p className="font-medium">{search ? 'No jobs match your search' : 'No jobs yet'}</p>
-          {!search && <p className="text-sm mt-1">Click "Post New Job" to create your first opening</p>}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm py-20 text-center">
+          <Briefcase className="h-10 w-10 text-slate-200 mx-auto mb-3" />
+          <p className="text-slate-600 font-medium">{search ? 'No jobs match your search' : 'No jobs yet'}</p>
+          {!search && <p className="text-slate-400 text-sm mt-1">Click "Post New Job" to create your first opening</p>}
         </div>
       ) : (
-        <div className="grid gap-4">
+        <div className="grid gap-3">
           {filtered.map(job => (
-            <Link key={job.id} to={`/jobs/${job.id}`} className="block bg-card border rounded-xl p-5 hover:border-primary/50 hover:shadow-sm transition-all">
+            <Link key={job.id} to={`/jobs/${job.id}`}
+              className="block bg-white rounded-2xl border border-slate-100 shadow-sm p-5
+                         hover:shadow-md hover:border-indigo-200 hover:-translate-y-0.5 transition-all duration-200 group">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <h3 className="font-semibold text-base">{job.title}</h3>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${priorityColor[job.priority] ?? ''}`}>
+                  <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                    <h3 className="font-semibold text-[15px] text-slate-900">{job.title}</h3>
+                    <span className={`badge ${job.priority === 'urgent' ? 'badge-red' : job.priority === 'high' ? 'badge-amber' : job.priority === 'low' ? 'badge-gray' : 'badge-blue'} capitalize`}>
                       {job.priority}
                     </span>
                     {job.status !== 'open' && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 capitalize">{job.status}</span>
+                      <span className="badge badge-gray capitalize">{job.status}</span>
                     )}
                   </div>
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
-                    {job.department_name && <span>{job.department_name}</span>}
-                    {job.location_city && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{job.location_city}</span>}
+                  <div className="flex items-center gap-4 text-[12px] text-slate-400 flex-wrap">
+                    {job.department_name && <span className="font-medium text-slate-500">{job.department_name}</span>}
+                    {job.location_city && (
+                      <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{job.location_city}</span>
+                    )}
                     <span className="capitalize">{job.job_type.replace('_', ' ')}</span>
                     <span className="capitalize">{job.work_mode}</span>
-                    <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{daysOpen(job.created_at)} days ago</span>
+                    <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{daysOpen(job.created_at)}d ago</span>
                   </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="text-xs mt-1"><span className="font-medium">{job.headcount}</span> opening{job.headcount !== 1 ? 's' : ''}</p>
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="text-right">
+                    <p className="text-[13px] font-bold text-slate-900">{job.headcount}</p>
+                    <p className="text-[11px] text-slate-400">opening{job.headcount !== 1 ? 's' : ''}</p>
+                  </div>
+                  <div className="h-8 w-8 rounded-xl bg-indigo-50 flex items-center justify-center
+                                  group-hover:bg-indigo-600 transition-colors">
+                    <Sparkles className="h-4 w-4 text-indigo-400 group-hover:text-white transition-colors" />
+                  </div>
                 </div>
-              </div>
-              <div className="mt-3 flex items-center gap-3">
-                <button className="flex items-center gap-1 text-xs bg-brand-50 text-brand-700 px-3 py-1.5 rounded-md font-medium hover:bg-brand-100">
-                  <Sparkles className="h-3 w-3" /> AI Screen
-                </button>
-                <button className="flex items-center gap-1 text-xs border px-3 py-1.5 rounded-md font-medium hover:bg-accent">
-                  <Users className="h-3 w-3" /> View Pipeline
-                </button>
               </div>
             </Link>
           ))}
@@ -241,12 +247,16 @@ export default function JobsPage() {
 
       {/* ── Post New Job Modal ─────────────────────────── */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 overflow-y-auto py-6 px-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="text-lg font-bold">Post New Job</h2>
-              <button onClick={() => setShowModal(false)} className="p-1.5 rounded-md hover:bg-gray-100">
-                <X className="h-5 w-5" />
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm overflow-y-auto py-6 px-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-auto border border-slate-100">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <div>
+                <h2 className="text-[16px] font-bold text-slate-900">Post New Job</h2>
+                <p className="text-[12px] text-slate-400 mt-0.5">Fill in the details to create a new opening</p>
+              </div>
+              <button onClick={() => setShowModal(false)}
+                className="h-8 w-8 rounded-xl hover:bg-slate-100 flex items-center justify-center transition-colors text-slate-400 hover:text-slate-600">
+                <X className="h-4 w-4" />
               </button>
             </div>
 
@@ -459,12 +469,10 @@ export default function JobsPage() {
               )}
 
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowModal(false)}
-                  className="flex-1 border rounded-lg py-2.5 text-sm font-medium hover:bg-gray-50">
+                <button type="button" onClick={() => setShowModal(false)} className="btn-ghost flex-1">
                   Cancel
                 </button>
-                <button type="submit" disabled={submitting}
-                  className="flex-1 bg-primary text-white rounded-lg py-2.5 text-sm font-medium hover:bg-primary/90 disabled:opacity-60 flex items-center justify-center gap-2">
+                <button type="submit" disabled={submitting} className="btn-primary flex-1">
                   {submitting ? <><Loader2 className="h-4 w-4 animate-spin" />Creating…</> : 'Post Job'}
                 </button>
               </div>

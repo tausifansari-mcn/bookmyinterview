@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect } from 'react'
+﻿import { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '@/lib/api'
-import { Sparkles, Loader2, Eye, EyeOff, CheckCircle2, ArrowLeft } from 'lucide-react'
+import { Loader2, Eye, EyeOff, CheckCircle2, ArrowLeft } from 'lucide-react'
 
 export default function ResetPasswordPage() {
   const navigate          = useNavigate()
@@ -102,9 +102,7 @@ export default function ResetPasswordPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2 mb-3">
-            <div className="h-10 w-10 rounded-xl bg-indigo-600 flex items-center justify-center">
-              <Sparkles className="h-5 w-5 text-white" />
-            </div>
+            <img src="/mas-call-logo.png" alt="Book My Interview" className="h-10 w-10 rounded-xl object-cover" />
             <span className="text-xl font-bold text-gray-900">Book My Interview</span>
           </div>
         </div>

@@ -72,19 +72,28 @@ export async function sendAdminOTPEmail(to: string, name: string, otp: string): 
 
 // ── Candidate emails ──────────────────────────────────────────
 
-export async function sendWelcomeEmail(to: string, name: string): Promise<void> {
+export async function sendWelcomeEmail(to: string, name: string, tempPassword?: string): Promise<void> {
+  const credBlock = tempPassword
+    ? `<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px 16px;margin:0 0 16px;">
+        <p style="margin:0 0 4px;color:#6b7280;font-size:13px;">Your temporary password:</p>
+        <p style="margin:0;font-size:18px;font-weight:700;letter-spacing:2px;color:#111827;">${tempPassword}</p>
+        <p style="margin:6px 0 0;color:#9ca3af;font-size:12px;">Please change it after your first login.</p>
+       </div>`
+    : ''
   const body = `<p style="margin:0 0 12px;color:#111827;font-size:16px;">Welcome, <strong>${name}</strong>! 🎉</p>
-    <p style="margin:0 0 16px;color:#6b7280;font-size:14px;line-height:1.6;">Your candidate account on <strong>Book My Interview</strong> has been created successfully. You can now browse open positions and apply to jobs that match your skills.</p>
+    <p style="margin:0 0 16px;color:#6b7280;font-size:14px;line-height:1.6;">Your account on <strong>Book My Interview</strong> has been created successfully.</p>
+    ${credBlock}
     <div style="text-align:center;margin:24px 0;">
       <a href="${env.FRONTEND_URL ?? 'http://localhost:5173'}/portal/jobs"
          style="background:#4f46e5;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">
-        Browse Jobs →
+        Get Started →
       </a>
     </div>
     <p style="margin:0;color:#9ca3af;font-size:13px;">Complete your profile to increase your chances of getting noticed by recruiters.</p>`
-  await send(to, 'Welcome to Book My Interview!',
-    branded('Welcome!', 'Your account is ready', body),
-    `Welcome ${name}!\n\nYour candidate account is ready. Visit ${env.FRONTEND_URL ?? 'http://localhost:5173'}/portal/jobs to browse jobs.\n\n— Book My Interview`)
+  const plain = tempPassword
+    ? `Welcome ${name}!\n\nYour account is ready.\nTemporary password: ${tempPassword}\n\nPlease change it after first login.\n\n— Book My Interview`
+    : `Welcome ${name}!\n\nYour account is ready. Visit ${env.FRONTEND_URL ?? 'http://localhost:5173'}/portal to get started.\n\n— Book My Interview`
+  await send(to, 'Welcome to Book My Interview!', branded('Welcome!', 'Your account is ready', body), plain)
 }
 
 export async function sendApplicationConfirmationEmail(
@@ -244,6 +253,119 @@ export async function sendInterviewCancelEmail(
   await send(to, `Interview Cancelled: ${jobTitle} — Book My Interview`,
     branded('Interview Cancelled', `Regarding your interview for ${jobTitle}`, body),
     `Hi ${name},\n\nYour interview for ${jobTitle} has been cancelled.${reason ? `\nReason: ${reason}` : ''}\n\n— Book My Interview`)
+}
+
+export async function sendOfferMadeEmail(
+  to: string, name: string, jobTitle: string, company: string
+): Promise<void> {
+  const body = `<p style="margin:0 0 12px;color:#111827;font-size:16px;">Dear <strong>${name}</strong>,</p>
+    <p style="margin:0 0 16px;color:#6b7280;font-size:14px;line-height:1.6;">We are excited to inform you that you have received an <strong>offer</strong> for the position of <strong>${jobTitle}</strong> at <strong>${company}</strong>!</p>
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:20px;margin:0 0 20px;text-align:center;">
+      <p style="margin:0;color:#166534;font-size:18px;font-weight:700;">🎉 Congratulations! Offer Extended</p>
+    </div>
+    <p style="margin:0 0 16px;color:#6b7280;font-size:14px;line-height:1.6;">Our team will be in touch with the full offer details shortly. Please log in to your portal to track this update.</p>
+    <div style="text-align:center;margin:20px 0;">
+      <a href="${env.FRONTEND_URL ?? 'http://localhost:5173'}/portal/applications"
+         style="background:#059669;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">
+        View Offer →
+      </a>
+    </div>`
+  await send(to, `Offer Extended: ${jobTitle} at ${company} — Book My Interview`,
+    branded('Offer Extended!', `You have an offer for ${jobTitle}`, body),
+    `Dear ${name},\n\nCongratulations! You have received an offer for ${jobTitle} at ${company}.\n\nCheck your portal: ${env.FRONTEND_URL ?? 'http://localhost:5173'}/portal/applications\n\n— Book My Interview`)
+}
+
+export async function sendHiredEmail(
+  to: string, name: string, jobTitle: string, company: string
+): Promise<void> {
+  const body = `<p style="margin:0 0 12px;color:#111827;font-size:16px;">Dear <strong>${name}</strong>,</p>
+    <p style="margin:0 0 16px;color:#6b7280;font-size:14px;line-height:1.6;">We are thrilled to confirm that you have been <strong>selected</strong> for the role of <strong>${jobTitle}</strong> at <strong>${company}</strong>.</p>
+    <div style="background:linear-gradient(135deg,#ecfdf5,#d1fae5);border:1px solid #6ee7b7;border-radius:12px;padding:24px;margin:0 0 20px;text-align:center;">
+      <p style="margin:0 0 4px;color:#065f46;font-size:22px;font-weight:800;">🏆 Welcome to the team!</p>
+      <p style="margin:4px 0 0;color:#059669;font-size:14px;">You have been officially hired.</p>
+    </div>
+    <p style="margin:0;color:#6b7280;font-size:14px;line-height:1.6;">The HR team will reach out shortly with onboarding details. We look forward to having you on board!</p>`
+  await send(to, `You're Hired! ${jobTitle} at ${company} — Book My Interview`,
+    branded("You're Hired!", `Welcome to ${company}!`, body),
+    `Dear ${name},\n\nCongratulations! You have been hired for ${jobTitle} at ${company}. Welcome to the team!\n\n— Book My Interview`)
+}
+
+export async function sendJobMatchEmail(
+  to: string, name: string, jobTitle: string, company: string,
+  jobType: string, location: string, skills: string[]
+): Promise<void> {
+  const portalUrl = `${env.FRONTEND_URL ?? 'http://localhost:5173'}/portal/jobs`
+  const skillChips = skills.slice(0, 5).map(s =>
+    `<span style="display:inline-block;padding:3px 10px;margin:2px;background:#eff6ff;color:#2563eb;border-radius:20px;font-size:11px;font-weight:600;">${s}</span>`
+  ).join('')
+  const body = `<p style="margin:0 0 12px;color:#111827;font-size:16px;">Hi <strong>${name}</strong>,</p>
+    <p style="margin:0 0 16px;color:#6b7280;font-size:14px;line-height:1.6;">A company just posted a job that matches your skills. Don't miss this opportunity!</p>
+    <div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border-radius:14px;padding:20px;margin:0 0 20px;border:1px solid #bfdbfe;">
+      <p style="margin:0 0 4px;color:#1e3a8a;font-size:20px;font-weight:800;">${jobTitle}</p>
+      <p style="margin:4px 0 8px;color:#3b82f6;font-size:14px;font-weight:600;">${company}</p>
+      <p style="margin:0 0 10px;color:#64748b;font-size:13px;">🏢 ${jobType.replace('_',' ')} · 📍 ${location || 'India'}</p>
+      <div>${skillChips}</div>
+    </div>
+    <p style="margin:0 0 16px;color:#6b7280;font-size:14px;line-height:1.6;">Your profile skills align with this role. Apply now before spots fill up!</p>
+    <div style="text-align:center;margin:24px 0;">
+      <a href="${portalUrl}"
+         style="background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;padding:14px 40px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;display:inline-block;">
+        View Job &amp; Apply →
+      </a>
+    </div>
+    <p style="margin:0;color:#9ca3af;font-size:12px;">You received this because your skills match this job. <a href="${portalUrl}" style="color:#6366f1;">Manage preferences</a></p>`
+  await send(to, `Job Match: ${jobTitle} at ${company} — Book My Interview`,
+    branded('New Job Match!', `${company} is hiring for ${jobTitle}`, body),
+    `Hi ${name},\n\n${company} posted ${jobTitle} — it matches your skills!\n\nApply here: ${portalUrl}\n\n— Book My Interview`)
+}
+
+export async function sendInterviewUnlockEmail(
+  to: string, name: string, jobTitle: string, company: string
+): Promise<void> {
+  const url = `${env.FRONTEND_URL ?? 'http://localhost:5173'}/portal/applications`
+  const body = `<p style="margin:0 0 12px;color:#111827;font-size:16px;">Hi <strong>${name}</strong>,</p>
+    <p style="margin:0 0 16px;color:#6b7280;font-size:14px;line-height:1.6;">Great news! You have successfully cleared all screening gates for <strong>${jobTitle}</strong> at <strong>${company}</strong>.</p>
+    <div style="background:linear-gradient(135deg,#ecfdf5,#d1fae5);border:1px solid #6ee7b7;border-radius:12px;padding:20px;margin:0 0 20px;text-align:center;">
+      <p style="margin:0 0 8px;color:#065f46;font-size:16px;font-weight:700;">🎉 All 3 Gates Cleared!</p>
+      <div style="display:flex;justify-content:center;gap:16px;margin:12px 0;">
+        <span style="background:#fff;border:1px solid #6ee7b7;border-radius:8px;padding:8px 12px;font-size:12px;color:#059669;font-weight:600;">✓ Profile 95%+</span>
+        <span style="background:#fff;border:1px solid #6ee7b7;border-radius:8px;padding:8px 12px;font-size:12px;color:#059669;font-weight:600;">✓ Assessment 80%+</span>
+        <span style="background:#fff;border:1px solid #6ee7b7;border-radius:8px;padding:8px 12px;font-size:12px;color:#059669;font-weight:600;">✓ Intro 80%+</span>
+      </div>
+    </div>
+    <p style="margin:0 0 16px;color:#6b7280;font-size:14px;line-height:1.6;">You are now invited to select your preferred interview date and time. Visit your portal to choose a slot.</p>
+    <div style="text-align:center;margin:24px 0;">
+      <a href="${url}" style="background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;padding:14px 36px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;display:inline-block;">
+        Pick Interview Slot →
+      </a>
+    </div>`
+  await send(to, `Interview Unlocked: ${jobTitle} — Book My Interview`,
+    branded('Interview Unlocked!', 'You cleared all gates — pick your slot', body),
+    `Hi ${name},\n\nCongratulations! You cleared all 3 gates for ${jobTitle} at ${company}.\n\nPick your interview slot: ${url}\n\n— Book My Interview`)
+}
+
+export async function sendMeetingLinkEmail(
+  to: string, name: string, jobTitle: string, company: string, slotDate: string, meetingLink: string
+): Promise<void> {
+  const body = `<p style="margin:0 0 12px;color:#111827;font-size:16px;">Hi <strong>${name}</strong>,</p>
+    <p style="margin:0 0 16px;color:#6b7280;font-size:14px;line-height:1.6;">Your interview for <strong>${jobTitle}</strong> at <strong>${company}</strong> is confirmed. Here are the details:</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin:0 0 20px;">
+      <tr style="background:#f9fafb;"><td style="padding:10px 16px;font-size:13px;color:#6b7280;border-bottom:1px solid #e5e7eb;">Date &amp; Time</td><td style="padding:10px 16px;font-size:14px;font-weight:600;color:#111827;border-bottom:1px solid #e5e7eb;">${slotDate}</td></tr>
+      <tr><td style="padding:10px 16px;font-size:13px;color:#6b7280;">Mode</td><td style="padding:10px 16px;font-size:14px;font-weight:600;color:#4f46e5;">Online / Video Call</td></tr>
+    </table>
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin:0 0 20px;">
+      <p style="margin:0 0 8px;color:#1e40af;font-size:13px;font-weight:600;">Meeting Link:</p>
+      <a href="${meetingLink}" style="color:#4f46e5;font-size:14px;word-break:break-all;">${meetingLink}</a>
+    </div>
+    <div style="text-align:center;margin:20px 0;">
+      <a href="${meetingLink}" style="background:#4f46e5;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">
+        Join Interview →
+      </a>
+    </div>
+    <p style="margin:0;color:#9ca3af;font-size:12px;">Please join 5 minutes early. Ensure your camera and microphone are working.</p>`
+  await send(to, `Interview Confirmed: ${jobTitle} — Book My Interview`,
+    branded('Interview Confirmed!', `Your meeting link for ${jobTitle} is ready`, body),
+    `Hi ${name},\n\nYour interview for ${jobTitle} at ${company} is confirmed.\n\nDate: ${slotDate}\nJoin: ${meetingLink}\n\n— Book My Interview`)
 }
 
 export async function sendInterviewScheduleEmail(

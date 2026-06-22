@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { api } from '@/lib/api'
-import { Sparkles, Loader2, Eye, EyeOff, CheckCircle2, ArrowLeft } from 'lucide-react'
+import { Loader2, Eye, EyeOff, CheckCircle2, ArrowLeft } from 'lucide-react'
 
 export default function AdminResetPasswordPage() {
   const navigate    = useNavigate()
@@ -77,9 +77,7 @@ export default function AdminResetPasswordPage() {
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <div className="flex justify-center mb-5">
             <div className="flex items-center gap-2">
-              <div className="h-10 w-10 rounded-xl bg-primary flex items-center justify-center">
-                <Sparkles className="h-6 w-6 text-white" />
-              </div>
+              <img src="/logo.png" alt="Book My Interview" className="h-10 w-10 rounded-xl object-cover" />
               <div>
                 <h1 className="font-bold text-lg leading-none">Book My Interview</h1>
                 <p className="text-xs text-muted-foreground">Admin Password Reset</p>
